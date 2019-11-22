@@ -1,7 +1,7 @@
-#include "LinesearchParametrizer.h"
+#include "ReweightedARAP/LinesearchParametrizer.h"
 
-#include "eigen_stl_utils.h"
-#include "parametrization_utils.h"
+#include "ReweightedARAP/eigen_stl_utils.h"
+#include "ReweightedARAP/parametrization_utils.h"
 
 #include "igl/avg_edge_length.h"
 

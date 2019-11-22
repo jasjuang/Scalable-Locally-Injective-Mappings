@@ -1,4 +1,4 @@
-#include "parametrization_utils.h"
+#include "ReweightedARAP/parametrization_utils.h"
 
 #include <igl/adjacency_matrix.h>
 #include <igl/arap.h>
@@ -22,7 +22,7 @@
 #include <igl/covariance_scatter_matrix.h>
 #include <igl/edge_lengths.h>
 
-#include "PardisoSolver.h"
+#include "ReweightedARAP/PardisoSolver.h"
 
 #undef NDEBUG
 #include <assert.h>

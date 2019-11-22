@@ -1,7 +1,7 @@
-#include "SymmetricDirichlet.h"
+#include "ReweightedARAP/SymmetricDirichlet.h"
 
-#include "eigen_stl_utils.h"
-#include "parametrization_utils.h"
+#include "ReweightedARAP/eigen_stl_utils.h"
+#include "ReweightedARAP/parametrization_utils.h"
 
 #include "igl/boundary_loop.h"
 #include <igl/cotmatrix_entries.h>

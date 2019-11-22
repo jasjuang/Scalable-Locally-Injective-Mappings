@@ -1,4 +1,4 @@
-#include "eigen_stl_utils.h"
+#include "ReweightedARAP/eigen_stl_utils.h"
 
 void int_set_to_eigen_vector(const std::set<int>& int_set, Eigen::VectorXi& vec) {
 	vec.resize(int_set.size()); int idx = 0;

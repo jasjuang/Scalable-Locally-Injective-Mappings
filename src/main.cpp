@@ -1,10 +1,10 @@
 #include <iostream>
 
-#include "Param_State.h"
-#include "GlobalLocalParametrization.h"
-#include "eigen_stl_utils.h"
-#include "parametrization_utils.h"
-#include "StateManager.h"
+#include "ReweightedARAP/Param_State.h"
+#include "ReweightedARAP/GlobalLocalParametrization.h"
+#include "ReweightedARAP/eigen_stl_utils.h"
+#include "ReweightedARAP/parametrization_utils.h"
+#include "ReweightedARAP/StateManager.h"
 
 #include "igl/components.h"
 #include "igl/writeOBJ.h"

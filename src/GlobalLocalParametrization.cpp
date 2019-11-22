@@ -1,9 +1,9 @@
-#include "GlobalLocalParametrization.h"
+#include "ReweightedARAP/GlobalLocalParametrization.h"
 
-#include "Param_State.h"
-#include "eigen_stl_utils.h"
-#include "parametrization_utils.h"
-#include "LinesearchParametrizer.h"
+#include "ReweightedARAP/Param_State.h"
+#include "ReweightedARAP/eigen_stl_utils.h"
+#include "ReweightedARAP/parametrization_utils.h"
+#include "ReweightedARAP/LinesearchParametrizer.h"
 
 
 #include <igl/boundary_loop.h>

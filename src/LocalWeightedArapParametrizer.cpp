@@ -1,6 +1,6 @@
-#include "LocalWeightedArapParametrizer.h"
+#include "ReweightedARAP/LocalWeightedArapParametrizer.h"
 
-#include "eigen_stl_utils.h"
+#include "ReweightedARAP/eigen_stl_utils.h"
 
 #include "igl/arap.h"
 #include "igl/cat.h"
