@@ -7,8 +7,8 @@
 #include <string>
 
 
-#include "LocalWeightedArapParametrizer.h"
-#include "ParametrizationAlgorithm.h"
+#include "ReweightedARAP/LocalWeightedArapParametrizer.h"
+#include "ReweightedARAP/ParametrizationAlgorithm.h"
 
 #include <igl/jet.h>
 #include <igl/readOBJ.h>

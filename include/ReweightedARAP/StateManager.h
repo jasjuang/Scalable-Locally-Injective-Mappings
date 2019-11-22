@@ -11,7 +11,7 @@
 #include <igl/viewer/Viewer.h>
 #endif
 
-#include "Param_State.h"
+#include "ReweightedARAP/Param_State.h"
 
 class StateManager {
 

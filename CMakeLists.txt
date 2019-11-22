@@ -65,6 +65,9 @@ else()
   set(ADDITIONAL_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PardisoSolver.cpp
   )
+  set(ADDITIONAL_INCLUDES
+	  ${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/PardisoSolver.h
+  )
 endif()
 
 # Compile thread building blocks
@@ -94,5 +97,26 @@ set(SOURCES
   ${ADDITIONAL_SOURCES}
 )
 
-add_executable(${PROJECT_NAME} ${SOURCES})
+set(INCLUDES
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/eigen_stl_utils.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/parametrization_utils.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/Param_State.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/LocalWeightedArapParametrizer.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/GlobalLocalParametrization.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/LinesearchParametrizer.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/SymmetricDirichlet.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/FastLsBuildUtils.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/StateManager.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/Energy.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/StateManager.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/AlgorithmStage.h
+	${ADDITIONAL_INCLUDES}
+)
+
+add_executable(${PROJECT_NAME} ${SOURCES} ${INCLUDES})
+
+target_include_directories(
+	${PROJECT_NAME} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+                         $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include>)
+
 target_link_libraries(${PROJECT_NAME} tbb_static ${ADDITIONAL_LIBRARIES})

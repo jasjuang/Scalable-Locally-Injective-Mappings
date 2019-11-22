@@ -7,9 +7,9 @@
 #include <set>
 #include <vector>
 
-#include "AlgorithmStage.h"
-#include "Energy.h"
-#include "Param_State.h"
+#include "ReweightedARAP/AlgorithmStage.h"
+#include "ReweightedARAP/Energy.h"
+#include "ReweightedARAP/Param_State.h"
 
 class LinesearchParametrizer {
 

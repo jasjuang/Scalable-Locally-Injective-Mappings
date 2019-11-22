@@ -7,15 +7,15 @@
 #include <set>
 #include <vector>
 
-#include "AlgorithmStage.h"
-#include "SymmetricDirichlet.h"
-#include "Energy.h"
-#include "FastLsBuildUtils.h"
-#include "Param_State.h"
-#include "parametrization_utils.h"
+#include "ReweightedARAP/AlgorithmStage.h"
+#include "ReweightedARAP/SymmetricDirichlet.h"
+#include "ReweightedARAP/Energy.h"
+#include "ReweightedARAP/FastLsBuildUtils.h"
+#include "ReweightedARAP/Param_State.h"
+#include "ReweightedARAP/parametrization_utils.h"
 
 #ifdef USE_PARDISO
-#include "PardisoSolver.h"
+#include "ReweightedARAP/PardisoSolver.h"
 #endif
 
 #include "igl/arap.h"

@@ -11,7 +11,7 @@
 #include <igl/viewer/Viewer.h>
 #endif
 
-#include "StateManager.h"
+#include "ReweightedARAP/StateManager.h"
 
 class ParametrizationAlgorithm {
 
