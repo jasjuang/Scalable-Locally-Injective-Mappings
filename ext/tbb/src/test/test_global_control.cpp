@@ -1,27 +1,23 @@
 /*
-    Copyright 2005-2015 Intel Corporation.  All Rights Reserved.
+    Copyright (c) 2005-2019 Intel Corporation
 
-    This file is part of Threading Building Blocks. Threading Building Blocks is free software;
-    you can redistribute it and/or modify it under the terms of the GNU General Public License
-    version 2  as  published  by  the  Free Software Foundation.  Threading Building Blocks is
-    distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
-    implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-    See  the GNU General Public License for more details.   You should have received a copy of
-    the  GNU General Public License along with Threading Building Blocks; if not, write to the
-    Free Software Foundation, Inc.,  51 Franklin St,  Fifth Floor,  Boston,  MA 02110-1301 USA
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
 
-    As a special exception,  you may use this file  as part of a free software library without
-    restriction.  Specifically,  if other files instantiate templates  or use macros or inline
-    functions from this file, or you compile this file and link it with other files to produce
-    an executable,  this file does not by itself cause the resulting executable to be covered
-    by the GNU General Public License. This exception does not however invalidate any other
-    reasons why the executable file might be covered by the GNU General Public License.
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
 */
 
 #define TBB_PREVIEW_WAITING_FOR_WORKERS 1
-#define TBB_PREVIEW_GLOBAL_CONTROL 1
 #include "tbb/global_control.h"
 #include "harness.h"
+#include "tbb/task_scheduler_observer.h"
 
 const size_t MB = 1024*1024;
 const double BARRIER_TIMEOUT = 10.;
@@ -40,13 +36,9 @@ void TestStackSizeSimpleControl()
     }
 }
 
-#include "harness_concurrency_checker.h"
-#include "tbb/parallel_for.h"
+#include "harness_concurrency_tracker.h"
 #include "tbb/task_scheduler_init.h"
-#include "tbb/blocked_range.h"
-#include "tbb/combinable.h"
 #include <limits.h>   // for UINT_MAX
-#include <functional> // for std::plus
 
 struct StackSizeRun: NoAssign {
     int                   num_threads;
@@ -71,55 +63,31 @@ void TestStackSizeThreadsControl()
     NativeParallelFor( threads, StackSizeRun(threads, &barr1, &barr2) );
 }
 
-class CheckWorkersNum {
-    static tbb::atomic<Harness::SpinBarrier*> barrier;
-    // count unique worker threads
-    static tbb::combinable<size_t>            uniqThreads;
-public:
-    CheckWorkersNum(Harness::SpinBarrier *barr) {
-        barrier = barr;
-    }
-    void operator()(const tbb::blocked_range<int>&) const {
-        uniqThreads.local() = 1;
-        if (barrier) {
-            barrier->timed_wait(BARRIER_TIMEOUT);
-            Harness::Sleep(10);
-            barrier = NULL;
-        }
-    }
-    static void check(size_t expected) {
-        size_t seen = uniqThreads.combine(std::plus<size_t>());
-        ASSERT(seen == expected, NULL);
-    }
-    static void clear() { uniqThreads.clear(); }
-    static const size_t LOOP_ITERS = 10*1000;
-};
-
-tbb::atomic<Harness::SpinBarrier*> CheckWorkersNum::barrier;
-tbb::combinable<size_t>  CheckWorkersNum::uniqThreads;
-
 void RunWorkersLimited(int tsi_max_threads, size_t parallelism, bool wait)
 {
     tbb::global_control s(tbb::global_control::max_allowed_parallelism, parallelism);
     // try both configuration with already sleeping workers and with not yet sleeping
     if (wait)
         Harness::Sleep(100);
-    // current implementation can't have effective active value below 2
-    const unsigned active_parallelism = max(2U, (unsigned)parallelism);
-    const unsigned expected_threads = tsi_max_threads>0?
-        min( (unsigned)tsi_max_threads, active_parallelism )
-        : ( tbb::tbb_thread::hardware_concurrency()==1? 1 : active_parallelism );
-    Harness::SpinBarrier barr(expected_threads);
-
-    CheckWorkersNum::clear();
-    tbb::parallel_for(tbb::blocked_range<int>(0, CheckWorkersNum::LOOP_ITERS, 1),
-                      CheckWorkersNum(&barr), tbb::simple_partitioner());
-    CheckWorkersNum::check(expected_threads);
+    const size_t expected_threads = tsi_max_threads>0?
+        min( (unsigned)tsi_max_threads, parallelism )
+        : ( tbb::tbb_thread::hardware_concurrency()==1? 1 : parallelism );
+    Harness::ExactConcurrencyLevel::check(expected_threads);
 }
+
+class blocking_task_scheduler_init {
+    tbb::task_scheduler_init init;
+public:
+    blocking_task_scheduler_init(int num_threads = tbb::task_scheduler_init::automatic) : init(num_threads) {}
+    ~blocking_task_scheduler_init() {
+        bool ok = init.blocking_terminate(std::nothrow);
+        ASSERT(ok, "blocking_terminate has failed");
+    }
+};
 
 void TSI_and_RunWorkers(int tsi_max_threads, size_t parallelism, size_t max_value)
 {
-    tbb::task_scheduler_init tsi(tsi_max_threads, 0, /*blocking=*/true);
+    blocking_task_scheduler_init tsi(tsi_max_threads);
     size_t active = tbb::global_control::active_value(tbb::global_control::max_allowed_parallelism);
     ASSERT(active == max(2U, max_value), "active_value must not be changed by task_scheduler_init");
     RunWorkersLimited(tsi_max_threads, parallelism, /*wait=*/false);
@@ -161,7 +129,7 @@ void TestWorkers(size_t curr_par)
 void TestWorkersConstraints() {
     const size_t max_parallelism =
         tbb::global_control::active_value(tbb::global_control::max_allowed_parallelism);
-    tbb::task_scheduler_init tsi(tbb::task_scheduler_init::automatic, 0, /*blocking=*/true);
+    blocking_task_scheduler_init tsi;
     if (max_parallelism > 3) {
         tbb::global_control c(tbb::global_control::max_allowed_parallelism, max_parallelism-1);
         ASSERT(max_parallelism-1 ==
@@ -182,6 +150,17 @@ void TestWorkersConstraints() {
     }
 }
 
+struct DummyBody {
+    void operator()(int) const {
+        __TBB_Pause(1);
+    }
+};
+
+void RunParallelWork() {
+    const int LOOP_ITERS = 10*1000;
+    tbb::parallel_for(0, LOOP_ITERS, DummyBody(), tbb::simple_partitioner());
+}
+
 struct SetUseRun: NoAssign {
     Harness::SpinBarrier *barr;
 
@@ -189,10 +168,8 @@ struct SetUseRun: NoAssign {
     void operator()( int id ) const {
         if (id == 0) {
             for (int i=0; i<10; i++) {
-                tbb::task_scheduler_init tsi(tbb::task_scheduler_init::automatic, 0,
-                                             /*blocking=*/true);
-                tbb::parallel_for(tbb::blocked_range<int>(0, CheckWorkersNum::LOOP_ITERS, 1),
-                                  CheckWorkersNum(NULL), tbb::simple_partitioner());
+                blocking_task_scheduler_init tsi;
+                RunParallelWork();
                 barr->timed_wait(BARRIER_TIMEOUT);
             }
         } else {
@@ -217,23 +194,13 @@ void TestAutoInit()
         tbb::global_control::active_value(tbb::global_control::max_allowed_parallelism);
     const unsigned expected_threads = tbb::tbb_thread::hardware_concurrency()==1?
         1 : (unsigned)max_parallelism;
-    Harness::SpinBarrier barr(expected_threads);
-
-    CheckWorkersNum::clear();
-    tbb::parallel_for(tbb::blocked_range<int>(0, CheckWorkersNum::LOOP_ITERS, 1),
-                      CheckWorkersNum(&barr), tbb::simple_partitioner());
+    Harness::ExactConcurrencyLevel::check(expected_threads);
     ASSERT(tbb::global_control::active_value(tbb::global_control::max_allowed_parallelism)
            == max_parallelism, "max_allowed_parallelism must not be changed after auto init");
-    CheckWorkersNum::check(expected_threads);
     if (max_parallelism > 2) {
         // after autoinit it's possible to decrease workers number
         tbb::global_control s(tbb::global_control::max_allowed_parallelism, max_parallelism-1);
-        const unsigned expected_threads_1 = max(2U, (unsigned)max_parallelism-1);
-        barr.initialize(expected_threads_1);
-        CheckWorkersNum::clear();
-        tbb::parallel_for(tbb::blocked_range<int>(0, CheckWorkersNum::LOOP_ITERS, 1),
-                          CheckWorkersNum(&barr), tbb::simple_partitioner());
-        CheckWorkersNum::check(expected_threads_1);
+        Harness::ExactConcurrencyLevel::check(max_parallelism-1);
     }
 }
 
@@ -248,28 +215,28 @@ void TestInvalidParallelism()
 #if TRY_BAD_EXPR_ENABLED
     const size_t max_parallelism =
         tbb::global_control::active_value(tbb::global_control::max_allowed_parallelism);
-    for (size_t par = 0; par<=1; par++) {
-        {
-            tbb::set_assertion_handler( AssertionFailureHandler );
-            TRY_BAD_EXPR( tbb::global_control c(tbb::global_control::max_allowed_parallelism, par), "Values of 1 and 0 are not supported for max_allowed_parallelism." );
-            tbb::set_assertion_handler( ReportError );
-            ASSERT(tbb::global_control::active_value(tbb::global_control::max_allowed_parallelism)
-                   == max_parallelism, NULL);
-        }
-        {
-            const size_t P = 2;
-            tbb::global_control c(tbb::global_control::max_allowed_parallelism, P);
-            ASSERT(tbb::global_control::active_value(tbb::global_control::max_allowed_parallelism)
-                   == P, NULL);
-            tbb::set_assertion_handler( AssertionFailureHandler );
-            TRY_BAD_EXPR( tbb::global_control cZ(tbb::global_control::max_allowed_parallelism, par), "Values of 1 and 0 are not supported for max_allowed_parallelism." );
-            tbb::set_assertion_handler( ReportError );
-            ASSERT(tbb::global_control::active_value(tbb::global_control::max_allowed_parallelism)
-                   == P, NULL);
-        }
+    {
+        tbb::set_assertion_handler( AssertionFailureHandler );
+        TRY_BAD_EXPR( tbb::global_control c(tbb::global_control::max_allowed_parallelism, 0),
+                       "max_allowed_parallelism cannot be 0." );
+        tbb::set_assertion_handler( ReportError );
         ASSERT(tbb::global_control::active_value(tbb::global_control::max_allowed_parallelism)
                == max_parallelism, NULL);
     }
+    {
+        const size_t P = 2;
+        tbb::global_control c(tbb::global_control::max_allowed_parallelism, P);
+        ASSERT(tbb::global_control::active_value(tbb::global_control::max_allowed_parallelism)
+               == P, NULL);
+        tbb::set_assertion_handler( AssertionFailureHandler );
+        TRY_BAD_EXPR( tbb::global_control cZ(tbb::global_control::max_allowed_parallelism, 0),
+                      "max_allowed_parallelism cannot be 0." );
+        tbb::set_assertion_handler( ReportError );
+        ASSERT(tbb::global_control::active_value(tbb::global_control::max_allowed_parallelism)
+               == P, NULL);
+    }
+    ASSERT(tbb::global_control::active_value(tbb::global_control::max_allowed_parallelism)
+           == max_parallelism, NULL);
 #endif /* TRY_BAD_EXPR_ENABLED */
 }
 
@@ -281,12 +248,12 @@ void TestTooBigStack()
     const size_t stack_sizes[] = {512*MB, 2*1024*MB, UINT_MAX, 10LU*1024*MB};
 #endif
 
-#if __TBB_WIN8UI_SUPPORT
+#if __TBB_WIN8UI_SUPPORT && (_WIN32_WINNT < 0x0A00)
     size_t default_ss = tbb::global_control::active_value(tbb::global_control::thread_stack_size);
 #endif
     for (unsigned i = 0; i<Harness::array_length(stack_sizes); i++) {
-        // as no stack size setting for Windows Store* apps, skip it
-#if TRY_BAD_EXPR_ENABLED && __TBB_x86_64 && (_WIN32 || _WIN64) && !__TBB_WIN8UI_SUPPORT
+        // No stack size setting for Windows 8 Store* apps, skip it
+#if TRY_BAD_EXPR_ENABLED && __TBB_x86_64 && (_WIN32 || _WIN64) && !(__TBB_WIN8UI_SUPPORT && (_WIN32_WINNT < 0x0A00))
         if (stack_sizes[i] != (unsigned)stack_sizes[i]) {
             size_t curr_ss = tbb::global_control::active_value(tbb::global_control::thread_stack_size);
             tbb::set_assertion_handler( AssertionFailureHandler );
@@ -298,25 +265,508 @@ void TestTooBigStack()
 #endif
         tbb::global_control s1(tbb::global_control::thread_stack_size, stack_sizes[i]);
         size_t actual_stack_sz = tbb::global_control::active_value(tbb::global_control::thread_stack_size);
-#if __TBB_WIN8UI_SUPPORT
-        ASSERT(actual_stack_sz == default_ss, "It's ignored for Windows Store* apps");
+#if __TBB_WIN8UI_SUPPORT && (_WIN32_WINNT < 0x0A00)
+        ASSERT(actual_stack_sz == default_ss, "It's ignored for Windows 8.x Store* apps");
 #else
         ASSERT(actual_stack_sz==stack_sizes[i], NULL);
 #endif
     }
 }
 
+struct ParallelForRun: NoAssign {
+    int                   num_threads;
+    Harness::SpinBarrier *barr1, *barr2;
+
+    ParallelForRun(Harness::SpinBarrier *b1, Harness::SpinBarrier *b2) :
+        barr1(b1), barr2(b2) {}
+    void operator()( int /*id*/ ) const {
+        barr1->timed_wait(BARRIER_TIMEOUT);
+        RunParallelWork();
+        barr2->timed_wait(BARRIER_TIMEOUT);
+    }
+};
+
+class FFTask: public tbb::task {
+    tbb::atomic<int> *counter;
+    tbb::task* execute() __TBB_override {
+        (*counter)++;
+       return NULL;
+   }
+public:
+    FFTask(tbb::atomic<int> *counter_) : counter(counter_) {}
+};
+
+class WaiterTask: public tbb::task {
+    tbb::atomic<bool> *flag;
+    tbb::task* execute() __TBB_override {
+        while(!*flag)
+            __TBB_Yield();
+       return NULL;
+   }
+public:
+    WaiterTask(tbb::atomic<bool> *flag_) : flag(flag_) {}
+};
+
+class WorkAndEnqueueTask: public tbb::task {
+    tbb::atomic<int> *counter;
+    tbb::atomic<bool> *signalToLeave;
+    tbb::task* execute() __TBB_override {
+        RunParallelWork();
+        *signalToLeave = true;
+        for (int i=0; i<ENQUEUE_TASKS; i++) {
+            FFTask* t = new( tbb::task::allocate_root() ) FFTask(counter);
+            tbb::task::enqueue(*t);
+        }
+
+        return NULL;
+   }
+public:
+    static const int ENQUEUE_TASKS = 10;
+    WorkAndEnqueueTask(tbb::atomic<int> *counter_, tbb::atomic<bool> *signal_)
+        : counter(counter_), signalToLeave(signal_) {}
+};
+
+#if __TBB_TASK_PRIORITY
+tbb::priority_t getPriorityByInt(int i) {
+    return i%3==0? tbb::priority_low : (i%3==1? tbb::priority_normal :
+                                        tbb::priority_high);
+}
+#endif
+
+class FFTasksRun: NoAssign {
+    void enqTasks(int id) const {
+        for (int i=0; i<ITERS; i++) {
+            FFTask* t = new( tbb::task::allocate_root() ) FFTask(cnt);
+#if __TBB_TASK_PRIORITY
+            tbb::priority_t p = getPriorityByInt(i+id);
+            tbb::task::enqueue(*t, p);
+#else
+            tbb::internal::suppress_unused_warning(id);
+            tbb::task::enqueue(*t);
+#endif
+        }
+    }
+public:
+    static const int ITERS = 20;
+    Harness::SpinBarrier *barr;
+    tbb::atomic<int> *cnt;
+
+    FFTasksRun(Harness::SpinBarrier *b, tbb::atomic<int> *c) :
+        barr(b), cnt(c) {}
+    void operator()(int id) const {
+        if (id)
+            enqTasks(id);
+        barr->wait();
+        if (!id)
+            enqTasks(id);
+    }
+};
+
+void TestTaskEnqueue()
+{
+    {
+        blocking_task_scheduler_init tsi(20);
+        tbb::atomic<int> flag;
+        tbb::atomic<bool> taskDoneFlag;
+        flag = 0;
+        taskDoneFlag = false;
+
+        for (int i=0; i<10; i++) {
+            WaiterTask* w = new( tbb::task::allocate_root() ) WaiterTask(&taskDoneFlag);
+            tbb::task::enqueue(*w);
+        }
+        tbb::global_control c(tbb::global_control::max_allowed_parallelism, 1);
+        taskDoneFlag = true;
+
+        FFTask* t = new( tbb::task::allocate_root() ) FFTask(&flag);
+        tbb::task::enqueue(*t);
+        while(!flag)
+            __TBB_Yield();
+    }
+    {
+        blocking_task_scheduler_init tsi(1);
+        tbb::atomic<int> flag;
+        tbb::atomic<bool> taskDoneFlag;
+        flag = 0;
+        taskDoneFlag = false;
+
+        WaiterTask* w = new( tbb::task::allocate_root() ) WaiterTask(&taskDoneFlag);
+        tbb::task::enqueue(*w);
+        taskDoneFlag = true;
+
+        tbb::global_control c(tbb::global_control::max_allowed_parallelism, 1);
+
+        FFTask* t = new( tbb::task::allocate_root() ) FFTask(&flag);
+        tbb::task::enqueue(*t);
+        while(!flag)
+            __TBB_Yield();
+    }
+    {
+        blocking_task_scheduler_init tsi(2);
+        tbb::atomic<int> flag;
+        flag = 0;
+
+        tbb::global_control c(tbb::global_control::max_allowed_parallelism, 1);
+
+        FFTask* t = new( tbb::task::allocate_root() ) FFTask(&flag);
+        tbb::task::enqueue(*t);
+        while(!flag)
+            __TBB_Yield();
+    }
+    {
+        blocking_task_scheduler_init tsi(2);
+        tbb::atomic<int> flag;
+        flag = 0;
+
+        FFTask* t = new( tbb::task::allocate_root() ) FFTask(&flag);
+        tbb::task::enqueue(*t);
+        tbb::global_control c(tbb::global_control::max_allowed_parallelism, 1);
+
+        while(!flag)
+            __TBB_Yield();
+    }
+
+    tbb::global_control c(tbb::global_control::max_allowed_parallelism, 1);
+
+    { // check that enqueue() guarantee mandatory parallelism
+        blocking_task_scheduler_init tsi(1);
+        tbb::atomic<int> flag;
+        flag = 0;
+
+        FFTask* t = new( tbb::task::allocate_root() ) FFTask(&flag);
+        tbb::task::enqueue(*t);
+        while(!flag)
+            __TBB_Yield();
+    }
+    {
+        tbb::atomic<int> flag;
+        flag = 0;
+        {
+            blocking_task_scheduler_init tsi(1);
+
+            for (int i=0; i<10; i++) {
+                FFTask* t = new( tbb::task::allocate_root() ) FFTask(&flag);
+#if __TBB_TASK_PRIORITY
+                const tbb::priority_t p = getPriorityByInt(i);
+                tbb::task::enqueue(*t, p);
+#else
+                tbb::task::enqueue(*t);
+#endif
+            }
+        }
+        ASSERT(flag==10, "The tasks must be terminated when task_scheduler_init destroyed.");
+    }
+    const unsigned threads = 2;
+    {
+        blocking_task_scheduler_init tsi(1);
+        Harness::SpinBarrier barr1(threads), barr2(threads);
+        RunWorkersLimited(1, 1, false);
+
+        NativeParallelFor( threads, ParallelForRun(&barr1, &barr2) );
+    }
+
+    tbb::atomic<int> counter;
+    counter = 0;
+    {
+        blocking_task_scheduler_init tsi(1);
+        Harness::SpinBarrier barr(threads);
+        RunWorkersLimited(1, 1, false);
+
+        NativeParallelFor( threads, FFTasksRun(&barr, &counter) );
+    }
+    ASSERT(counter == threads*FFTasksRun::ITERS, "All tasks must be done when task_scheduler_init destroyed.");
+    counter = 0;
+    { // an enqueued task can enqueue other tasks and calls parallel_for
+        tbb::atomic<bool> signalToLeave;
+        blocking_task_scheduler_init tsi(1);
+
+        signalToLeave = false;
+        WorkAndEnqueueTask *t = new( tbb::task::allocate_root() )
+            WorkAndEnqueueTask(&counter, &signalToLeave);
+        tbb::task::enqueue(*t);
+        RunParallelWork();
+
+        while (!signalToLeave)
+            __TBB_Yield();
+    }
+    ASSERT(counter == WorkAndEnqueueTask::ENQUEUE_TASKS, "All tasks must be done when task_scheduler_init destroyed.");
+}
+
+class CountWorkersTask: public tbb::task {
+    tbb::atomic<bool> *flag;
+    // count unique worker threads
+    static tbb::combinable<size_t> uniqThreads;
+
+    tbb::task* execute() __TBB_override {
+        uniqThreads.local() = 1;
+        Harness::Sleep(10);
+        *flag = 1;
+        return NULL;
+   }
+public:
+    CountWorkersTask(tbb::atomic<bool> *flag_) : flag(flag_) {}
+    static size_t observedThreads() {
+        return uniqThreads.combine(std::plus<size_t>());
+    }
+};
+
+tbb::combinable<size_t> CountWorkersTask::uniqThreads;
+
+tbb::atomic<int> activeArenas;
+
+class ArenaObserver: public tbb::task_scheduler_observer {
+public:
+    ArenaObserver() : tbb::task_scheduler_observer(/*local=*/true) {
+    }
+    void on_scheduler_entry( bool worker ) __TBB_override {
+        if (worker) {
+            ++activeArenas;
+        }
+    }
+    void on_scheduler_exit( bool worker ) __TBB_override {
+        if (worker) {
+            --activeArenas;
+        }
+    }
+};
+
+ArenaObserver observers[2];
+
+struct ArenasObserveRun: NoAssign {
+    Harness::SpinBarrier *barr;
+
+    ArenasObserveRun(Harness::SpinBarrier *b) : barr(b) {}
+    void operator()( int id ) const {
+        observers[id].observe(true);
+        ArenaObserver o;
+        tbb::atomic<bool> flag;
+        flag = false;
+
+        CountWorkersTask* t = new( tbb::task::allocate_root() )
+            CountWorkersTask(&flag);
+        barr->wait();
+        tbb::task::enqueue(*t);
+        while(!flag)
+            __TBB_Yield();
+    }
+};
+
+struct ArenaRun: NoAssign {
+    tbb::atomic<int> *counter;
+
+    ArenaRun(tbb::atomic<int> *counter_) : counter(counter_) {}
+    void operator()() const {
+        (*counter)++;
+    }
+};
+
+struct ArenaUserRun: NoAssign {
+    static const int ENQUEUE_TASKS = 10;
+    tbb::task_arena *arena;
+    Harness::SpinBarrier *barr;
+    tbb::atomic<int> *counter;
+
+    ArenaUserRun(tbb::task_arena *a, Harness::SpinBarrier *b, tbb::atomic<int> *c) :
+        arena(a), barr(b), counter(c)  {}
+    void operator()( int id ) const {
+
+        for (int i=0; i<ENQUEUE_TASKS; i++)
+            arena->enqueue(ArenaRun(counter));
+        barr->wait();
+        if (!id)
+            arena->terminate();
+    }
+};
+
+void TestConcurrentArenas()
+{
+    Harness::SpinBarrier barrier(2);
+    tbb::global_control c(tbb::global_control::max_allowed_parallelism, 1);
+    {
+        blocking_task_scheduler_init tsi(2);
+        ArenaObserver observer;
+        observer.observe(true);
+
+        Harness::ExactConcurrencyLevel::check(1); // must have 0 worker threads
+
+        NativeParallelFor( 2, ArenasObserveRun(&barrier) );
+        ASSERT(1 == CountWorkersTask::observedThreads(),
+               "Single worker is expecting to serve mandatory parallelism.");
+        while(activeArenas) // wait till single worker termination
+            __TBB_Yield();
+
+        // check that without mandatory parallelism, still have 0 worker threads
+        Harness::ExactConcurrencyLevel::check(1);
+    }
+    tbb::atomic<int> counter;
+    counter = 0;
+    {
+        blocking_task_scheduler_init tsi(1);
+        tbb::task_arena arena(2);
+
+        NativeParallelFor( 2, ArenaUserRun(&arena, &barrier, &counter) );
+    }
+    ASSERT(counter == 2*ArenaUserRun::ENQUEUE_TASKS, "All tasks must be done.");
+}
+
+void TestParallelismRestored()
+{
+    const int TASKS = 5;
+    tbb::atomic<int> counter;
+    counter = 0;
+    {
+        const int P = 4;
+        blocking_task_scheduler_init tsi(P);
+        {
+            ASSERT(tbb::this_task_arena::max_concurrency() == P, NULL);
+            tbb::global_control s(tbb::global_control::max_allowed_parallelism, 1);
+            Harness::ExactConcurrencyLevel::check(1);
+            // create enforced concurrency in the arena
+            for (int i=0; i<TASKS; i++) {
+                FFTask* t = new( tbb::task::allocate_root() ) FFTask(&counter);
+                tbb::task::enqueue(*t);
+            }
+            ASSERT(tbb::this_task_arena::max_concurrency() == P, NULL);
+        }
+        ASSERT(tbb::this_task_arena::max_concurrency() == P, NULL);
+        // global control is off, check that concurrency P is available
+        Harness::ExactConcurrencyLevel::check(P);
+    }
+    ASSERT(counter==TASKS, "The tasks must be executed at this point.");
+}
+
+class NoUnwantedEnforcedRun {
+    Harness::SpinBarrier *globalBarrier;
+public:
+    NoUnwantedEnforcedRun(Harness::SpinBarrier *b) : globalBarrier(b) {}
+    void operator()( int id ) const {
+        Harness::SpinBarrier barr(1);
+
+        tbb::combinable<size_t> uniqThreads;
+        Harness::ExactConcurrencyLevel::check(1);
+        globalBarrier->wait();
+        if (id) {
+            for (int i=0; i<20; i++) {
+                Harness::ExactConcurrencyLevel::check(1); // no workers expected in the thread
+            }
+        } else {
+            // create enforced concurrency in a separate thread, thus provoke enforced worker without
+            // work to do to join arena with parallel_for
+            for (int i=0; i<10; i++) {
+                tbb::atomic<int> flag;
+                flag = 0;
+                FFTask* t = new( tbb::task::allocate_root() ) FFTask(&flag);
+                tbb::task::enqueue(*t);
+                Harness::ExactConcurrencyLevel::checkLessOrEqual(2, &uniqThreads);
+                size_t seen = uniqThreads.combine(std::plus<size_t>());
+                ASSERT(seen==1 || seen==2, NULL);
+                while(!flag)
+                    __TBB_Yield();
+            }
+        }
+    }
+};
+
+// test that enforced concurrency from one thread doesn't affect another
+void TestNoUnwantedEnforced()
+{
+    Harness::SpinBarrier barrier(2);
+    tbb::global_control c(tbb::global_control::max_allowed_parallelism, 1);
+    blocking_task_scheduler_init tsi(4);
+    NativeParallelFor( 2, NoUnwantedEnforcedRun(&barrier) );
+}
+
+class TestMultipleControlsRun {
+    Harness::SpinBarrier *barrier;
+public:
+    TestMultipleControlsRun(Harness::SpinBarrier *b) : barrier(b) {}
+    void operator()( int id ) const {
+        barrier->wait();
+        if (id) {
+            {
+                tbb::global_control c(tbb::global_control::max_allowed_parallelism, 1);
+                Harness::ExactConcurrencyLevel::check(1);
+                barrier->wait();
+            }
+            Harness::ExactConcurrencyLevel::check(1);
+            barrier->wait();
+            {
+                tbb::global_control c(tbb::global_control::max_allowed_parallelism, 2);
+                Harness::ExactConcurrencyLevel::check(1);
+                barrier->wait();
+                Harness::ExactConcurrencyLevel::check(2);
+                barrier->wait();
+            }
+        } else {
+            {
+                Harness::ExactConcurrencyLevel::check(1);
+                tbb::global_control c(tbb::global_control::max_allowed_parallelism, 1);
+                barrier->wait();
+                Harness::ExactConcurrencyLevel::check(1);
+                barrier->wait();
+                Harness::ExactConcurrencyLevel::check(1);
+                barrier->wait();
+            }
+            Harness::ExactConcurrencyLevel::check(2);
+            barrier->wait();
+        }
+    }
+};
+
+// test that global controls from different thread with overlapping lifetime
+// still keep parallelism under control
+void TestMultipleControls()
+{
+    blocking_task_scheduler_init tsi(2); // to prevent autoinitialization
+    Harness::SpinBarrier barrier(2);
+    NativeParallelFor( 2, TestMultipleControlsRun(&barrier) );
+}
+
+// enqueued tasks with priority below current must not be forgotten,
+// when enqueue enforced priority is enabled
+void TestForgottenEnqueuedTasks()
+{
+    tbb::task_scheduler_init tsi(2);
+    tbb::atomic<int> counter;
+    tbb::atomic<bool> waitFlag;
+
+    waitFlag = false;
+    counter = 0;
+    tbb::task &r = *new( tbb::task::allocate_root() ) tbb::empty_task;
+    r.set_ref_count(3);
+    for (int i=0; i<2; i++) {
+        tbb::task &t = *new( r.allocate_child() ) WaiterTask(&waitFlag);
+        tbb::task::spawn(t);
+    }
+    // all workers are occupied by blocked WaiterTask()
+    FFTask* t = new( tbb::task::allocate_root() ) FFTask(&counter);
+    tbb::task::enqueue(*t, tbb::priority_low);
+    {
+        tbb::global_control c(tbb::global_control::max_allowed_parallelism, 1);
+        waitFlag = true; // WaiterTask() done, workers ready to use
+        while (!counter) // wait till FFTask() executed
+            __TBB_Yield();
+    }
+    r.wait_for_all();
+    tbb::task::destroy(r);
+}
+
 int TestMain()
 {
+    TestTaskEnqueue();
+    TestConcurrentArenas();
+    TestMultipleControls();
+    TestNoUnwantedEnforced();
+    TestParallelismRestored();
     const unsigned h_c = tbb::tbb_thread::hardware_concurrency();
     bool excessHC;
     {
         tbb::task_scheduler_init t(h_c+1);
-        excessHC = Harness::CanReachConcurrencyLevel(h_c+1);
+        excessHC = Harness::ExactConcurrencyLevel::isEqual(h_c+1);
     }
     if (h_c>2)
         TestWorkers(h_c-1);
-    if (excessHC)  // this requires hardware concurrency +1, and hang if not provided
+    if (excessHC)  // requires hardware concurrency +1, otherwise hangs
         TestWorkers(h_c+1);
     if (excessHC || h_c >= 2)
         TestWorkers(2);
@@ -329,13 +779,13 @@ int TestMain()
 
     size_t default_ss = tbb::global_control::active_value(tbb::global_control::thread_stack_size);
     ASSERT(default_ss, NULL);
-#if !__TBB_WIN8UI_SUPPORT
-    // it's impossible to change stack size for Windows Store* apps, so skip the tests
+
+// it's impossible to change stack size for Windows 8 Store* apps, so skip the tests
+#if !(__TBB_WIN8UI_SUPPORT && (_WIN32_WINNT < 0x0A00))
     TestStackSizeSimpleControl();
     TestStackSizeThreadsControl();
 #endif
     TestTooBigStack();
     ASSERT(default_ss == tbb::global_control::active_value(tbb::global_control::thread_stack_size), NULL);
-
     return Harness::Done;
 }

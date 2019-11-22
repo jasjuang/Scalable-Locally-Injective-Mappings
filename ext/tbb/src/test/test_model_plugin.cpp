@@ -1,21 +1,17 @@
 /*
-    Copyright 2005-2015 Intel Corporation.  All Rights Reserved.
+    Copyright (c) 2005-2019 Intel Corporation
 
-    This file is part of Threading Building Blocks. Threading Building Blocks is free software;
-    you can redistribute it and/or modify it under the terms of the GNU General Public License
-    version 2  as  published  by  the  Free Software Foundation.  Threading Building Blocks is
-    distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
-    implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-    See  the GNU General Public License for more details.   You should have received a copy of
-    the  GNU General Public License along with Threading Building Blocks; if not, write to the
-    Free Software Foundation, Inc.,  51 Franklin St,  Fifth Floor,  Boston,  MA 02110-1301 USA
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
 
-    As a special exception,  you may use this file  as part of a free software library without
-    restriction.  Specifically,  if other files instantiate templates  or use macros or inline
-    functions from this file, or you compile this file and link it with other files to produce
-    an executable,  this file does not by itself cause the resulting executable to be covered
-    by the GNU General Public License. This exception does not however invalidate any other
-    reasons why the executable file might be covered by the GNU General Public License.
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
 */
 
 #define HARNESS_DEFAULT_MIN_THREADS 4
@@ -53,18 +49,7 @@ int TestMain() {
 
 #include <stdlib.h>
 #include <stdio.h>
-
-#if !TBB_USE_EXCEPTIONS && _MSC_VER
-    // Suppress "C++ exception handler used, but unwind semantics are not enabled" warning in STL headers
-    #pragma warning (push)
-    #pragma warning (disable: 4530)
-#endif
-
 #include <stdexcept>
-
-#if !TBB_USE_EXCEPTIONS && _MSC_VER
-    #pragma warning (pop)
-#endif
 
 #if TBB_USE_EXCEPTIONS
     #include "harness_report.h"
@@ -129,9 +114,9 @@ void plugin_call(int maxthread)
 
 #else /* _USRDLL undefined */
 
-#define HARNESS_NO_ASSERT 1
 #include "harness.h"
 #include "harness_dynamic_libs.h"
+#include "harness_tls.h"
 
 extern "C" void plugin_call(int);
 
@@ -156,35 +141,6 @@ void report_error_in(const char* function_name)
 #endif
 }
 
-int use_lot_of_tls() {
-    int count = 0;
-#if _WIN32 || _WIN64
-    DWORD last_handles[10];
-    DWORD result;
-    result = TlsAlloc();
-    while( result!=TLS_OUT_OF_INDEXES ) {
-        last_handles[++count%10] = result;
-        result = TlsAlloc();
-    }
-    for( int i=0; i<10; ++i )
-        TlsFree(last_handles[i]);
-#else
-    pthread_key_t last_handles[10];
-    pthread_key_t result;
-    int setspecific_dummy=10;
-    while( pthread_key_create(&result, NULL)==0 
-           && count < 4096 ) // Sun Solaris doesn't have any built-in limit, so we set something big enough
-    {
-        last_handles[++count%10] = result;
-        pthread_setspecific(result,&setspecific_dummy);
-    }
-    REMARK("Created %d keys\n", count);
-    for( int i=0; i<10; ++i )
-        pthread_key_delete(last_handles[i]);
-#endif
-    return count-10;
-}
-
 typedef void (*PLUGIN_CALL)(int);
 
 #if __linux__
@@ -197,8 +153,7 @@ int TestMain () {
 #if !RML_USE_WCRM
     PLUGIN_CALL my_plugin_call;
 
-    int tls_key_count = use_lot_of_tls();
-    REMARK("%d thread local objects allocated in advance\n", tls_key_count);
+    LimitTLSKeysTo limitTLS(10);
 
     Harness::LIBRARY_HANDLE hLib;
 #if _WIN32 || _WIN64

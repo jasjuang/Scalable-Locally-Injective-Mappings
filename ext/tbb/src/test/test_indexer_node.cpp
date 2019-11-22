@@ -1,35 +1,36 @@
 /*
-    Copyright 2005-2015 Intel Corporation.  All Rights Reserved.
+    Copyright (c) 2005-2019 Intel Corporation
 
-    This file is part of Threading Building Blocks. Threading Building Blocks is free software;
-    you can redistribute it and/or modify it under the terms of the GNU General Public License
-    version 2  as  published  by  the  Free Software Foundation.  Threading Building Blocks is
-    distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
-    implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-    See  the GNU General Public License for more details.   You should have received a copy of
-    the  GNU General Public License along with Threading Building Blocks; if not, write to the
-    Free Software Foundation, Inc.,  51 Franklin St,  Fifth Floor,  Boston,  MA 02110-1301 USA
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
 
-    As a special exception,  you may use this file  as part of a free software library without
-    restriction.  Specifically,  if other files instantiate templates  or use macros or inline
-    functions from this file, or you compile this file and link it with other files to produce
-    an executable,  this file does not by itself cause the resulting executable to be covered
-    by the GNU General Public License. This exception does not however invalidate any other
-    reasons why the executable file might be covered by the GNU General Public License.
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
 */
 
+#if __TBB_CPF_BUILD
+#define TBB_DEPRECATED_FLOW_NODE_EXTRACTION 1
+#endif
+
 #include "harness.h"
+#include "harness_graph.h"
 #include "tbb/flow_graph.h"
 
 //
 // Tests
 //
 
- #if defined(_MSC_VER) && _MSC_VER < 1600
+#if defined(_MSC_VER) && _MSC_VER < 1600
     #pragma warning (disable : 4503) //disabling the "decorated name length exceeded" warning for VS2008 and earlier
 #endif
 
-#if TBB_PREVIEW_FLOW_GRAPH_FEATURES
+#if TBB_DEPRECATED_FLOW_NODE_EXTRACTION
 template< typename T >
 class test_indexer_extract {
 protected:
@@ -107,8 +108,8 @@ protected:
     }
 
     void make_and_validate_full_graph() {
-        /*     in0                         */ 
-        /*         \                       */ 
+        /*     in0                         */
+        /*         \                       */
         /*           port0          out0   */
         /*         /       |      /        */
         /*     in1         middle          */
@@ -139,15 +140,15 @@ protected:
         int first_pred = *(mp0_list.begin()) == ins[0] ? 0 : ( *(mp0_list.begin()) == ins[1] ? 1 : -1 );
         typename in_node_t::predecessor_list_type::iterator piv = mp0_list.begin();++piv;
         int second_pred = *piv == ins[0] ? 0 : ( *piv == ins[1] ? 1 : -1 );
-        ASSERT( first_pred != -1 && second_pred != -1 && first_pred != second_pred, "bad predecessor(s) for middle port 0" ); 
+        ASSERT( first_pred != -1 && second_pred != -1 && first_pred != second_pred, "bad predecessor(s) for middle port 0" );
 
         ASSERT( *(mp1_list.begin()) == ins[2], "bad predecessor for middle port 1" );
 
         int first_succ = *(ms_list.begin()) == outs[0] ? 0 : ( *(ms_list.begin()) == outs[1] ? 1 : -1 );
         typename out_node_t::successor_list_type::iterator ms_vec_iter = ms_list.begin(); ++ms_vec_iter;
         int second_succ = *ms_vec_iter == outs[0] ? 0 : ( *ms_vec_iter == outs[1] ? 1 : -1 );
-        ASSERT( first_succ != -1 && second_succ != -1 && first_succ != second_succ, "bad successor(s) for middle" ); 
- 
+        ASSERT( first_succ != -1 && second_succ != -1 && first_succ != second_succ, "bad successor(s) for middle" );
+
         in0.try_put(1);
         in1.try_put(2);
         in2.try_put(8);
@@ -155,7 +156,7 @@ protected:
         g.wait_for_all();
 
         T v_in;
-    
+
         ASSERT( in0.try_get(v_in) == false, "buffer should not have a value" );
         ASSERT( in1.try_get(v_in) == false, "buffer should not have a value" );
         ASSERT( in1.try_get(v_in) == false, "buffer should not have a value" );
@@ -180,8 +181,8 @@ protected:
     }
 
     void validate_partial_graph() {
-        /*     in0                         */ 
-        /*                                 */ 
+        /*     in0                         */
+        /*                                 */
         /*           port0          out0   */
         /*         /       |               */
         /*     in1         middle          */
@@ -208,7 +209,7 @@ protected:
         in2.try_put(8);
         in2.try_put(4);
         g.wait_for_all();
-    
+
         T v_in;
         typename my_node_t::output_type v;
 
@@ -227,8 +228,8 @@ protected:
     }
 
     void validate_empty_graph() {
-        /*     in0                         */ 
-        /*                                 */ 
+        /*     in0                         */
+        /*                                 */
         /*            port0         out0   */
         /*                |                */
         /*     in1         middle          */
@@ -255,7 +256,7 @@ protected:
         in2.try_put(8);
         in2.try_put(4);
         g.wait_for_all();
-    
+
         T v_in;
         typename my_node_t::output_type v;
 
@@ -281,7 +282,7 @@ public:
         ms_p1_ptr = static_cast< typename in_node_t::successor_type * >(&tbb::flow::input_port<1>(middle));
         mp_ptr = static_cast< typename out_node_t::predecessor_type *>(&middle);
     }
- 
+
     virtual ~test_indexer_extract() {}
 
     void run_tests() {
@@ -464,12 +465,12 @@ public:
         for(int i=0; i < nInputs; ++i) {
             my_source_node_type *new_node = new my_source_node_type(g, source_body<IT>((IT)(ELEM+1), i, nInputs));
             tbb::flow::make_edge(*new_node, tbb::flow::input_port<ELEM-1>(my_indexer));
-#if TBB_PREVIEW_FLOW_GRAPH_FEATURES
+#if TBB_DEPRECATED_FLOW_NODE_EXTRACTION
             ASSERT(new_node->successor_count() == 1, NULL);
 #endif
             all_source_nodes[ELEM-1][i] = (void *)new_node;
         }
-#if TBB_PREVIEW_FLOW_GRAPH_FEATURES
+#if TBB_DEPRECATED_FLOW_NODE_EXTRACTION
         ASSERT(tbb::flow::input_port<ELEM-1>(my_indexer).predecessor_count() == (size_t)nInputs, NULL);
 #endif
         // add the next source_node
@@ -548,7 +549,7 @@ public:
         }
         for(int nInputs = 1; nInputs <= MaxNSources; ++nInputs) {
             tbb::flow::graph g;
-            IType* my_indexer = new IType(g); //makeIndexer<IType>::create(); 
+            IType* my_indexer = new IType(g); //makeIndexer<IType>::create();
             tbb::flow::queue_node<TType> outq1(g);
             tbb::flow::queue_node<TType> outq2(g);
 
@@ -657,7 +658,7 @@ void test_one_serial( IType &my_indexer, tbb::flow::graph &g) {
     q3_input_type v;
 
     tbb::flow::make_edge(my_indexer, q3);
-#if TBB_PREVIEW_FLOW_GRAPH_FEATURES
+#if TBB_DEPRECATED_FLOW_NODE_EXTRACTION
     ASSERT(my_indexer.successor_count() == 1, NULL);
     ASSERT(tbb::flow::input_port<0>(my_indexer).predecessor_count() == 0, NULL);
 #endif
@@ -708,6 +709,8 @@ static void test() {
     static const int ELEMS = 3;
     IType* my_indexer = new IType(g); //makeIndexer<IType>::create(g);
 
+    test_input_ports_return_ref(*my_indexer);
+
     serial_queue_helper<SIZE, IType>::print_remark(); REMARK(" >\n");
 
     test_one_serial<IType,TType,SIZE>(*my_indexer, g);
@@ -725,7 +728,7 @@ static void test() {
 
 template<
       template<typename> class TestType,  // serial_test or parallel_test
-      typename T0, typename T1=void, typename T2=void, typename T3=void, typename T4=void, 
+      typename T0, typename T1=void, typename T2=void, typename T3=void, typename T4=void,
       typename T5=void, typename T6=void, typename T7=void, typename T8=void, typename T9=void> // type of the inputs to the indexer_node
 class generate_test {
 public:
@@ -737,9 +740,9 @@ public:
 
 //specializations for indexer node inputs
 template<
-      template<typename> class TestType,  
-      typename T0, typename T1, typename T2, typename T3, typename T4, 
-      typename T5, typename T6, typename T7, typename T8> 
+      template<typename> class TestType,
+      typename T0, typename T1, typename T2, typename T3, typename T4,
+      typename T5, typename T6, typename T7, typename T8>
 class generate_test<TestType, T0, T1, T2, T3, T4, T5, T6, T7, T8> {
 public:
     typedef tbb::flow::indexer_node<T0, T1, T2, T3, T4, T5, T6, T7, T8>  indexer_node_type;
@@ -749,9 +752,9 @@ public:
 };
 
 template<
-      template<typename> class TestType, 
-      typename T0, typename T1, typename T2, typename T3, typename T4, 
-      typename T5, typename T6, typename T7> 
+      template<typename> class TestType,
+      typename T0, typename T1, typename T2, typename T3, typename T4,
+      typename T5, typename T6, typename T7>
 class generate_test<TestType, T0, T1, T2, T3, T4, T5, T6, T7> {
 public:
     typedef tbb::flow::indexer_node<T0, T1, T2, T3, T4, T5, T6, T7>  indexer_node_type;
@@ -761,9 +764,9 @@ public:
 };
 
 template<
-      template<typename> class TestType, 
-      typename T0, typename T1, typename T2, typename T3, typename T4, 
-      typename T5, typename T6> 
+      template<typename> class TestType,
+      typename T0, typename T1, typename T2, typename T3, typename T4,
+      typename T5, typename T6>
 class generate_test<TestType, T0, T1, T2, T3, T4, T5, T6> {
 public:
     typedef tbb::flow::indexer_node<T0, T1, T2, T3, T4, T5, T6>  indexer_node_type;
@@ -773,9 +776,9 @@ public:
 };
 
 template<
-      template<typename> class TestType, 
-      typename T0, typename T1, typename T2, typename T3, typename T4, 
-      typename T5> 
+      template<typename> class TestType,
+      typename T0, typename T1, typename T2, typename T3, typename T4,
+      typename T5>
 class generate_test<TestType, T0, T1, T2, T3, T4, T5>  {
 public:
     typedef tbb::flow::indexer_node<T0, T1, T2, T3, T4, T5>  indexer_node_type;
@@ -785,8 +788,8 @@ public:
 };
 
 template<
-      template<typename> class TestType, 
-      typename T0, typename T1, typename T2, typename T3, typename T4> 
+      template<typename> class TestType,
+      typename T0, typename T1, typename T2, typename T3, typename T4>
 class generate_test<TestType, T0, T1, T2, T3, T4>  {
 public:
     typedef tbb::flow::indexer_node<T0, T1, T2, T3, T4>  indexer_node_type;
@@ -796,8 +799,8 @@ public:
 };
 
 template<
-      template<typename> class TestType,  
-      typename T0, typename T1, typename T2, typename T3>  
+      template<typename> class TestType,
+      typename T0, typename T1, typename T2, typename T3>
 class generate_test<TestType, T0, T1, T2, T3> {
 public:
     typedef tbb::flow::indexer_node<T0, T1, T2, T3>  indexer_node_type;
@@ -807,8 +810,8 @@ public:
 };
 
 template<
-      template<typename> class TestType,  
-      typename T0, typename T1, typename T2> 
+      template<typename> class TestType,
+      typename T0, typename T1, typename T2>
 class generate_test<TestType, T0, T1, T2> {
 public:
     typedef tbb::flow::indexer_node<T0, T1, T2>  indexer_node_type;
@@ -818,8 +821,8 @@ public:
 };
 
 template<
-      template<typename> class TestType,  
-      typename T0, typename T1>           
+      template<typename> class TestType,
+      typename T0, typename T1>
 class generate_test<TestType, T0, T1> {
 public:
     typedef tbb::flow::indexer_node<T0, T1>  indexer_node_type;
@@ -829,8 +832,8 @@ public:
 };
 
 template<
-      template<typename> class TestType,  
-      typename T0>           
+      template<typename> class TestType,
+      typename T0>
 class generate_test<TestType, T0> {
 public:
     typedef tbb::flow::indexer_node<T0>  indexer_node_type;
@@ -838,6 +841,95 @@ public:
         TestType<indexer_node_type>::test();
     }
 };
+
+#if __TBB_PREVIEW_FLOW_GRAPH_NODE_SET
+template<typename tagged_msg_t, typename input_t>
+void check_edge(tbb::flow::graph& g,
+                tbb::flow::broadcast_node<input_t>& start,
+                tbb::flow::buffer_node<tagged_msg_t>& buf,
+                input_t input_value) {
+    start.try_put(input_value);
+    g.wait_for_all();
+
+    tagged_msg_t msg;
+    bool is_get_succeeded = buf.try_get(msg);
+
+    ASSERT((is_get_succeeded), "There is no item in the buffer");
+    ASSERT((tbb::flow::cast_to<input_t>(msg) == input_value), "Wrong item value");
+}
+
+void test_follows() {
+    using namespace tbb::flow;
+    using indexer_output_t = indexer_node<int, float, double>::output_type;
+
+    graph g;
+    broadcast_node<continue_msg> start(g);
+
+    broadcast_node<int> start1(g);
+    broadcast_node<float> start2(g);
+    broadcast_node<double> start3(g);
+
+    indexer_node<int, float, double> my_indexer(follows(start1, start2, start3));
+
+    buffer_node<indexer_output_t> buf(g);
+    make_edge(my_indexer, buf);
+
+    check_edge<indexer_output_t, int>(g, start1, buf, 1);
+    check_edge<indexer_output_t, float>(g, start2, buf, 2.2f);
+    check_edge<indexer_output_t, double>(g, start3, buf, 3.3);
+}
+
+void test_precedes() {
+    using namespace tbb::flow;
+
+    using indexer_output_t = indexer_node<int, float, double>::output_type;
+
+    graph g;
+
+    broadcast_node<int> start1(g);
+    broadcast_node<float> start2(g);
+    broadcast_node<double> start3(g);
+
+    buffer_node<indexer_output_t> buf1(g);
+    buffer_node<indexer_output_t> buf2(g);
+    buffer_node<indexer_output_t> buf3(g);
+
+    indexer_node<int, float, double> node(precedes(buf1, buf2, buf3));
+
+    make_edge(start1, input_port<0>(node));
+    make_edge(start2, input_port<1>(node));
+    make_edge(start3, input_port<2>(node));
+
+    check_edge<indexer_output_t, int>(g, start1, buf1, 1);
+    check_edge<indexer_output_t, float>(g, start2, buf2, 2.2f);
+    check_edge<indexer_output_t, double>(g, start3, buf3, 3.3);
+}
+
+void test_follows_and_precedes_api() {
+    test_follows();
+    test_precedes();
+}
+#endif // __TBB_PREVIEW_FLOW_GRAPH_NODE_SET
+
+#if __TBB_CPP17_DEDUCTION_GUIDES_PRESENT
+void test_deduction_guides() {
+    using namespace tbb::flow;
+    graph g;
+
+    broadcast_node<int> b1(g);
+    broadcast_node<double> b2(g);
+    indexer_node<int, double> i0(g);
+
+#if __TBB_PREVIEW_FLOW_GRAPH_NODE_SET
+    indexer_node i1(follows(b1, b2));
+    static_assert(std::is_same_v<decltype(i1), indexer_node<int, double>>);
+#endif
+
+    indexer_node i2(i0);
+    static_assert(std::is_same_v<decltype(i2), indexer_node<int, double>>);
+}
+
+#endif
 
 int TestMain() {
     REMARK("Testing indexer_node, ");
@@ -874,9 +966,15 @@ int TestMain() {
 #if MAX_TUPLE_TEST_SIZE >= 9
        generate_test<parallel_test, float, double, int, double, double, long, int, float, long>::do_test();
 #endif
-   }   
-#if TBB_PREVIEW_FLOW_GRAPH_FEATURES
+   }
+#if TBB_DEPRECATED_FLOW_NODE_EXTRACTION
    test_indexer_extract<int>().run_tests();
+#endif
+#if __TBB_PREVIEW_FLOW_GRAPH_NODE_SET
+    test_follows_and_precedes_api();
+#endif
+#if __TBB_CPP17_DEDUCTION_GUIDES_PRESENT
+    test_deduction_guides();
 #endif
    return Harness::Done;
 }

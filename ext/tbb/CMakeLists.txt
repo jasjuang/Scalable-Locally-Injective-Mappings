@@ -19,6 +19,7 @@ if(APPLE)
   set(CMAKE_MACOSX_RPATH ON)
 endif()
 
+file (WRITE src/tbb/version_string.ver "#define __TBB_VERSION_STRINGS(N) \"Empty\"")
 file(GLOB tbb_src "${CMAKE_CURRENT_SOURCE_DIR}/src/tbb/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/old/*.cpp")
 list(APPEND tbb_src ${CMAKE_CURRENT_SOURCE_DIR}/src/rml/client/rml_tbb.cpp)
 file(GLOB to_remove "${CMAKE_CURRENT_SOURCE_DIR}/src/old/test*.cpp")

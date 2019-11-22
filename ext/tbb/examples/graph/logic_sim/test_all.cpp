@@ -1,29 +1,27 @@
 /*
-    Copyright 2005-2015 Intel Corporation.  All Rights Reserved.
+    Copyright (c) 2005-2019 Intel Corporation
 
-    This file is part of Threading Building Blocks. Threading Building Blocks is free software;
-    you can redistribute it and/or modify it under the terms of the GNU General Public License
-    version 2  as  published  by  the  Free Software Foundation.  Threading Building Blocks is
-    distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
-    implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-    See  the GNU General Public License for more details.   You should have received a copy of
-    the  GNU General Public License along with Threading Building Blocks; if not, write to the
-    Free Software Foundation, Inc.,  51 Franklin St,  Fifth Floor,  Boston,  MA 02110-1301 USA
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
 
-    As a special exception,  you may use this file  as part of a free software library without
-    restriction.  Specifically,  if other files instantiate templates  or use macros or inline
-    functions from this file, or you compile this file and link it with other files to produce
-    an executable,  this file does not by itself cause the resulting executable to be covered
-    by the GNU General Public License. This exception does not however invalidate any other
-    reasons why the executable file might be covered by the GNU General Public License.
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
 */
 
-#define TBB_PREVIEW_FLOW_GRAPH_NODES 1
-
 #include "tbb/tbb_config.h"
+#include "tbb/global_control.h"
 #include <cstdio>
 
-#if __TBB_PREVIEW_COMPOSITE_NODE
+#include "../../common/utility/utility.h"
+#include "../../common/utility/get_default_num_threads.h"
+
+#if __TBB_FLOW_GRAPH_CPP11_FEATURES
 
 #if _MSC_VER
 #pragma warning (disable: 4503) // Suppress "decorated name length exceeded, name was truncated" warning
@@ -45,18 +43,12 @@
 bool verbose = false;            // prints bin details and other diagnostics to screen
 bool silent = false;             // suppress all output except for time
 
-int get_default_num_threads() {
-    static int threads = 0;
-    if (threads == 0)
-        threads = tbb::task_scheduler_init::default_num_threads();
-    return threads;
-}
-#endif
+#endif // __TBB_FLOW_GRAPH_CPP11_FEATURES
 
 int main(int argc, char *argv[]) {
-#if __TBB_PREVIEW_COMPOSITE_NODE
+#if __TBB_FLOW_GRAPH_CPP11_FEATURES
     try {
-        utility::thread_number_range threads(get_default_num_threads);
+        utility::thread_number_range threads(utility::get_default_num_threads);
         utility::parse_cli_arguments(argc, argv,
                                      utility::cli_argument_pack()
                                      //"-h" option for displaying help is present implicitly
@@ -69,19 +61,19 @@ int main(int argc, char *argv[]) {
 
         tick_count start = tick_count::now();
         for(int p = threads.first; p <= threads.last; p = threads.step(p)) {
-            task_scheduler_init init(p);
+            tbb::global_control c(tbb::global_control::max_allowed_parallelism, p);
             if (!silent)  cout << "graph test running on " << p << " threads.\n";
-            
+
             graph g;
 
             { // test buffer: 0, 1
                 buffer b(g);
                 toggle input(g);
                 led output(g, "OUTPUT", false); // false means we will explicitly call display to see LED
-                
+
                 make_edge(input.get_out(), input_port<0>(b));
                 make_edge(output_port<0>(b), output.get_in());
-                
+
                 if (!silent) printf("Testing buffer...\n");
                 input.activate(); // 0
                 g.wait_for_all();
@@ -97,10 +89,10 @@ int main(int argc, char *argv[]) {
                 not_gate n(g);
                 toggle input(g);
                 led output(g, "OUTPUT", false);
-                
+
                 make_edge(input.get_out(), input_port<0>(n));
                 make_edge(output_port<0>(n), output.get_in());
-                
+
                 if (!silent) printf("Testing not_gate...\n");
                 input.activate(); // 0
                 g.wait_for_all();
@@ -117,11 +109,11 @@ int main(int argc, char *argv[]) {
                 toggle input0(g);
                 toggle input1(g);
                 led output(g, "OUTPUT", false);
-                
+
                 make_edge(input0.get_out(), input_port<0>(a));
                 make_edge(input1.get_out(), input_port<1>(a));
                 make_edge(output_port<0>(a), output.get_in());
-                
+
                 if (!silent) printf("Testing and_gate...\n");
                 input1.activate();  input0.activate();  // 0 0
                 g.wait_for_all();
@@ -147,12 +139,12 @@ int main(int argc, char *argv[]) {
                 toggle input1(g);
                 toggle input2(g);
                 led output(g, "OUTPUT", false);
-                
+
                 make_edge(input0.get_out(), input_port<0>(o));
                 make_edge(input1.get_out(), input_port<1>(o));
                 make_edge(input2.get_out(), input_port<2>(o));
                 make_edge(output_port<0>(o), output.get_in());
-                
+
                 if (!silent) printf("Testing or_gate...\n");
                 input2.activate();  input1.activate();  input0.activate();  // 0 0 0
                 g.wait_for_all();
@@ -193,11 +185,11 @@ int main(int argc, char *argv[]) {
                 toggle input0(g);
                 toggle input1(g);
                 led output(g, "OUTPUT", false);
-                
+
                 make_edge(input0.get_out(), input_port<0>(x));
                 make_edge(input1.get_out(), input_port<1>(x));
                 make_edge(output_port<0>(x), output.get_in());
-                
+
                 if (!silent) printf("Testing xor_gate...\n");
                 input1.activate();  input0.activate();  // 0 0
                 g.wait_for_all();
@@ -223,11 +215,11 @@ int main(int argc, char *argv[]) {
                 toggle input0(g);
                 toggle input1(g);
                 led output(g, "OUTPUT", false);
-                
+
                 make_edge(input0.get_out(), input_port<0>(n));
                 make_edge(input1.get_out(), input_port<1>(n));
                 make_edge(output_port<0>(n), output.get_in());
-                
+
                 if (!silent) printf("Testing nor_gate...\n");
                 input1.activate();  input0.activate();  // 0 0
                 g.wait_for_all();
@@ -255,7 +247,7 @@ int main(int argc, char *argv[]) {
                 xor_gate<2> x(g);
                 nor_gate<2> n(g);
                 digit output(g, "OUTPUT", false);
-                
+
                 make_edge(input0.get_out(), input_port<0>(a));
                 make_edge(input1.get_out(), input_port<1>(a));
                 make_edge(output_port<0>(a), input_port<0>(output));
@@ -271,7 +263,7 @@ int main(int argc, char *argv[]) {
                 make_edge(input0.get_out(), input_port<0>(n));
                 make_edge(input1.get_out(), input_port<1>(n));
                 make_edge(output_port<0>(n), input_port<3>(output));
-                
+
                 if (!silent) printf("Testing steady_signal...\n");
                 input0.activate();  // 1
                 input1.activate();  // 0
@@ -303,31 +295,31 @@ int main(int argc, char *argv[]) {
                 toggle CarryIN(g);
                 led Sum(g, "SUM");
                 led CarryOUT(g, "CarryOUT");
-                
+
                 make_edge(A.get_out(), input_port<P::A0>(my_adder));
                 make_edge(B.get_out(), input_port<P::B0>(my_adder));
                 make_edge(CarryIN.get_out(), input_port<P::CI>(my_adder));
                 make_edge(output_port<P::S0>(my_adder), Sum.get_in());
                 make_edge(output_port<1>(my_adder), CarryOUT.get_in());
-                
+
                 A.activate();
                 B.activate();
                 CarryIN.activate();
-                
+
                 if (!silent) printf("A on\n");
                 A.flip();
                 g.wait_for_all();
                 if (!silent) Sum.display();
                 if (!silent) CarryOUT.display();
                 assert((Sum.get_value() == high) && (CarryOUT.get_value() == low));
-                
+
                 if (!silent) printf("A off\n");
                 A.flip();
                 g.wait_for_all();
                 if (!silent) Sum.display();
                 if (!silent) CarryOUT.display();
                 assert((Sum.get_value() == low) && (CarryOUT.get_value() == low));
-                
+
                 if (!silent) printf("B on\n");
                 B.flip();
                 g.wait_for_all();
@@ -340,7 +332,7 @@ int main(int argc, char *argv[]) {
                 if (!silent) Sum.display();
                 if (!silent) CarryOUT.display();
                 assert((Sum.get_value() == low) && (CarryOUT.get_value() == low));
-                
+
                 if (!silent) printf("CarryIN on\n");
                 CarryIN.flip();
                 g.wait_for_all();
@@ -353,7 +345,7 @@ int main(int argc, char *argv[]) {
                 if (!silent) Sum.display();
                 if (!silent) CarryOUT.display();
                 assert((Sum.get_value() == low) && (CarryOUT.get_value() == low));
-                
+
                 if (!silent) printf("A&B on\n");
                 A.flip();
                 B.flip();
@@ -368,7 +360,7 @@ int main(int argc, char *argv[]) {
                 if (!silent) Sum.display();
                 if (!silent) CarryOUT.display();
                 assert((Sum.get_value() == low) && (CarryOUT.get_value() == low));
-                
+
                 if (!silent) printf("A&CarryIN on\n");
                 A.flip();
                 CarryIN.flip();
@@ -383,7 +375,7 @@ int main(int argc, char *argv[]) {
                 if (!silent) Sum.display();
                 if (!silent) CarryOUT.display();
                 assert((Sum.get_value() == low) && (CarryOUT.get_value() == low));
-                
+
                 if (!silent) printf("B&CarryIN on\n");
                 B.flip();
                 CarryIN.flip();
@@ -398,7 +390,7 @@ int main(int argc, char *argv[]) {
                 if (!silent) Sum.display();
                 if (!silent) CarryOUT.display();
                 assert((Sum.get_value() == low) && (CarryOUT.get_value() == low));
-                
+
                 if (!silent) printf("A&B&CarryIN on\n");
                 A.flip();
                 B.flip();
@@ -432,7 +424,7 @@ int main(int argc, char *argv[]) {
                 make_edge(output_port<P::S0>(two_adder), input_port<0>(Sum));
 
                 make_edge(A[1].get_out(), input_port<P::A1>(two_adder));
-                make_edge(B[1].get_out(), input_port<P::B1>(two_adder)); 
+                make_edge(B[1].get_out(), input_port<P::B1>(two_adder));
                 make_edge(output_port<P::S1>(two_adder), input_port<1>(Sum));
 
                 make_edge(CarryIN.get_out(), input_port<P::CI>(two_adder));
@@ -487,21 +479,21 @@ int main(int argc, char *argv[]) {
 
                     make_edge(CarryIN.get_out(), input_port<P::CI>(four_adder));
                     make_edge(output_port<P::CO>(four_adder), CarryOUT.get_in());
-                
+
                 // Activate all switches at low state
                 for (int i=0; i<4; ++i) {
                     A[i].activate();
                     B[i].activate();
                 }
                 CarryIN.activate();
-                
+
                 if (!silent) printf("1+0\n");
                 A[0].flip();
                 g.wait_for_all();
                 if (!silent) Sum.display();
                 if (!silent) CarryOUT.display();
                 assert((Sum.get_value() == 1) && (CarryOUT.get_value() == low));
-                
+
                 if (!silent) printf("0+1\n");
                 A[0].flip();
                 B[0].flip();
@@ -509,7 +501,7 @@ int main(int argc, char *argv[]) {
                 if (!silent) Sum.display();
                 if (!silent) CarryOUT.display();
                 assert((Sum.get_value() == 1) && (CarryOUT.get_value() == low));
-                
+
                 if (!silent) printf("3+4\n");
                 A[0].flip();
                 A[1].flip();
@@ -519,7 +511,7 @@ int main(int argc, char *argv[]) {
                 if (!silent) Sum.display();
                 if (!silent) CarryOUT.display();
                 assert((Sum.get_value() == 7) && (CarryOUT.get_value() == low));
-                
+
                 if (!silent) printf("6+1\n");
                 A[0].flip();
                 A[2].flip();
@@ -529,7 +521,7 @@ int main(int argc, char *argv[]) {
                 if (!silent) Sum.display();
                 if (!silent) CarryOUT.display();
                 assert((Sum.get_value() == 7) && (CarryOUT.get_value() == low));
-                
+
                 if (!silent) printf("0+0+carry\n");
                 A[1].flip();
                 A[2].flip();
@@ -539,7 +531,7 @@ int main(int argc, char *argv[]) {
                 if (!silent) Sum.display();
                 if (!silent) CarryOUT.display();
                 assert((Sum.get_value() == 1) && (CarryOUT.get_value() == low));
-                
+
                 if (!silent) printf("15+15+carry\n");
                 A[0].flip();
                 A[1].flip();
@@ -553,7 +545,7 @@ int main(int argc, char *argv[]) {
                 if (!silent) Sum.display();
                 if (!silent) CarryOUT.display();
                 assert((Sum.get_value() == 0xf) && (CarryOUT.get_value() == high));
-                
+
                 if (!silent) printf("8+8\n");
                 A[0].flip();
                 A[1].flip();
@@ -566,7 +558,7 @@ int main(int argc, char *argv[]) {
                 if (!silent) Sum.display();
                 if (!silent) CarryOUT.display();
                 assert((Sum.get_value() == 0) && (CarryOUT.get_value() == high));
-                
+
                 if (!silent) printf("0+0\n");
                 A[3].flip();
                 B[3].flip();
@@ -584,7 +576,7 @@ int main(int argc, char *argv[]) {
                 led Q(g, " Q", verbose); // if true, LEDs print at every state change
                 led notQ(g, "~Q", verbose);
 
-                make_edge(D.get_out(), input_port<0>(my_d_latch)); 
+                make_edge(D.get_out(), input_port<0>(my_d_latch));
                 make_edge(E.get_out(), input_port<1>(my_d_latch));
                 make_edge(output_port<0>(my_d_latch), Q.get_in());
                 make_edge(output_port<1>(my_d_latch), notQ.get_in());
@@ -598,7 +590,7 @@ int main(int argc, char *argv[]) {
                 if (!silent && !verbose) { Q.display(); notQ.display(); }
                 assert((Q.get_value() == high) && (notQ.get_value() == low));
                 E.reset();
-                
+
                 if (!silent) printf("Toggling D\n");
                 E.activate();
                 D.flip();
@@ -606,7 +598,7 @@ int main(int argc, char *argv[]) {
                 if (!silent && !verbose) { Q.display(); notQ.display(); }
                 assert((Q.get_value() == low) && (notQ.get_value() == high));
                 E.reset();
-                
+
                 if (!silent) printf("Toggling D\n");
                 E.activate();
                 D.flip();
@@ -614,7 +606,7 @@ int main(int argc, char *argv[]) {
                 if (!silent && !verbose) { Q.display(); notQ.display(); }
                 assert((Q.get_value() == high) && (notQ.get_value() == low));
                 E.reset();
-                
+
                 if (!silent) printf("Toggling D\n");
                 E.activate();
                 D.flip();
@@ -622,7 +614,7 @@ int main(int argc, char *argv[]) {
                 if (!silent && !verbose) { Q.display(); notQ.display(); }
                 assert((Q.get_value() == low) && (notQ.get_value() == high));
                 E.reset();
-                
+
                 if (!silent) printf("Toggling D\n");
                 E.activate();
                 D.flip();
@@ -638,8 +630,8 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 #else
-    printf("skipped\n");
+    utility::report_skipped();
     return 0;
-#endif // __TBB_PREVIEW_COMPOSITE_NODE
+#endif // __TBB_FLOW_GRAPH_CPP11_FEATURES
 }
 

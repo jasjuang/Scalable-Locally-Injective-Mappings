@@ -1,20 +1,16 @@
-# Copyright 2005-2015 Intel Corporation.  All Rights Reserved.
+# Copyright (c) 2005-2019 Intel Corporation
 #
-# This file is part of Threading Building Blocks. Threading Building Blocks is free software;
-# you can redistribute it and/or modify it under the terms of the GNU General Public License
-# version 2  as  published  by  the  Free Software Foundation.  Threading Building Blocks is
-# distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See  the GNU General Public License for more details.   You should have received a copy of
-# the  GNU General Public License along with Threading Building Blocks; if not, write to the
-# Free Software Foundation, Inc.,  51 Franklin St,  Fifth Floor,  Boston,  MA 02110-1301 USA
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# As a special exception,  you may use this file  as part of a free software library without
-# restriction.  Specifically,  if other files instantiate templates  or use macros or inline
-# functions from this file, or you compile this file and link it with other files to produce
-# an executable,  this file does not by itself cause the resulting executable to be covered
-# by the GNU General Public License. This exception does not however invalidate any other
-# reasons why the executable file might be covered by the GNU General Public License.
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 # The original source for this example is
 # Copyright (c) 1994-2008 John E. Stone
@@ -52,9 +48,10 @@ CXX=icc
 endif # icc
 
 # The default runtime arguments
-export ARGS = dat/balls.dat
-export PERF_RUN_ARGS = silent dat/balls3.dat
-export LIGHT_ARGS= dat/model2.dat
+DATASET = balls
+override ARGS := dat/$(DATASET).dat $(ARGS)
+PERF_RUN_ARGS = silent dat/balls3.dat
+LIGHT_ARGS = dat/model2.dat
 
 # define name suffix
 SUFFIX = .$(VERSION)
@@ -71,6 +68,9 @@ endif
 endif # X
 
 MYCXXFLAGS = $(CXXFLAGS) $(UI_CXXFLAGS)
+
+# autodetect C++11 support
+include ../../common/examples-common.inc
 
 all: build run
 release: build
@@ -144,6 +144,8 @@ endif
 
 ifeq ($(shell uname), Linux)
 LIBS += -lrt 
+else ifeq ($(shell uname), Darwin)
+override CXXFLAGS += -Wl,-rpath,$(TBBROOT)/lib
 endif
 
 SOURCE = ../../common/gui/$(UI)video.cpp src/trace.$(SVERSION).cpp src/main.cpp src/pthread.cpp src/tachyon_video.cpp src/api.cpp src/apigeom.cpp src/apitrigeom.cpp src/bndbox.cpp src/box.cpp src/camera.cpp src/coordsys.cpp src/cylinder.cpp src/extvol.cpp src/global.cpp src/grid.cpp src/imageio.cpp src/imap.cpp src/intersect.cpp src/jpeg.cpp src/light.cpp src/objbound.cpp src/parse.cpp src/plane.cpp src/ppm.cpp src/quadric.cpp src/render.cpp src/ring.cpp src/shade.cpp src/sphere.cpp src/texture.cpp src/tgafile.cpp src/trace_rest.cpp src/triangle.cpp src/ui.cpp src/util.cpp src/vector.cpp src/vol.cpp
@@ -166,12 +168,12 @@ light_test_one:
 $(EXE): $(SOURCE)
 ifeq ($(UI),mac)
 	mkdir -p $(APPRES)/en.lproj $(NAME)$(SUFFIX).app/Contents/MacOS
-	cp ../../common/gui/xcode/tbbExample/Info.plist $(NAME)$(SUFFIX).app/Contents
+	cp ../../common/gui/xcode/tbbExample/tbbExample-Info.plist $(NAME)$(SUFFIX).app/Contents/Info.plist
 	cp ../../common/gui/xcode/tbbExample/PkgInfo $(NAME)$(SUFFIX).app/Contents
 	cp ../../common/gui/xcode/tbbExample/en.lproj/* $(APPRES)/en.lproj
-	$(CXX_UI) $(MYCXXFLAGS) $(CXXFLAGS) -c $(MACUISOURCES)
-endif # OS X*
-	$(CXX) $(MYCXXFLAGS) -o $@ $(SOURCE) $(MACUIOBJS) $(LIBS)
+	$(CXX_UI) $(MYCXXFLAGS) $(CXXFLAGS) -c $(MACUISOURCES) $(CXX0XFLAGS)
+endif # macOS*
+	$(CXX) $(MYCXXFLAGS) -o $@ $(SOURCE) $(MACUIOBJS) $(LIBS) $(CXX0XFLAGS)
 	$(RM) *.o
 
 clean: VERSION = *

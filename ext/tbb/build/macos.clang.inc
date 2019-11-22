@@ -1,23 +1,19 @@
-# Copyright 2005-2015 Intel Corporation.  All Rights Reserved.
+# Copyright (c) 2005-2019 Intel Corporation
 #
-# This file is part of Threading Building Blocks. Threading Building Blocks is free software;
-# you can redistribute it and/or modify it under the terms of the GNU General Public License
-# version 2  as  published  by  the  Free Software Foundation.  Threading Building Blocks is
-# distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See  the GNU General Public License for more details.   You should have received a copy of
-# the  GNU General Public License along with Threading Building Blocks; if not, write to the
-# Free Software Foundation, Inc.,  51 Franklin St,  Fifth Floor,  Boston,  MA 02110-1301 USA
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# As a special exception,  you may use this file  as part of a free software library without
-# restriction.  Specifically,  if other files instantiate templates  or use macros or inline
-# functions from this file, or you compile this file and link it with other files to produce
-# an executable,  this file does not by itself cause the resulting executable to be covered
-# by the GNU General Public License. This exception does not however invalidate any other
-# reasons why the executable file might be covered by the GNU General Public License.
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-CPLUS = clang++
-CONLY = clang
+CPLUS ?= clang++
+CONLY ?= clang
 COMPILE_ONLY = -c -MMD
 PREPROC_ONLY = -E -x c++
 INCLUDE_KEY = -I
@@ -44,31 +40,32 @@ else
     CPLUS_FLAGS = -g -O0 -DTBB_USE_DEBUG
 endif
 
-CPLUS_FLAGS += -DUSE_PTHREAD
+CPLUS_FLAGS += -DUSE_PTHREAD $(ITT_NOTIFY)
+
+ifeq (1,$(tbb_cpf))
+# For correct ucontext.h structures layout
+CPLUS_FLAGS += -D_XOPEN_SOURCE
+endif
 
 # For Clang, we add the option to support RTM intrinsics *iff* xtest is found in <immintrin.h>
-ifneq (,$(shell grep xtest `echo "\#include<immintrin.h>" | clang -E -M - 2>&1 | grep immintrin.h` 2>/dev/null))
+ifneq (,$(shell grep xtest `echo "\#include<immintrin.h>" | $(CONLY) -E -M - 2>&1 | grep immintrin.h` 2>/dev/null))
     RTM_KEY = -mrtm
 endif
 
-ifeq (libc++,$(stdlib))
-    CPLUS_FLAGS    += -stdlib=libc++
-    LIB_LINK_FLAGS += -stdlib=libc++
-endif
-
-CPP11_FLAGS = -std=c++11 -D_TBB_CPP0X
-    
-ifneq (00,$(lambdas)$(cpp0x))
-    CXX_ONLY_FLAGS += $(CPP11_FLAGS)
+ifneq (,$(stdlib))
+    CPLUS_FLAGS    += -stdlib=$(stdlib)
+    LIB_LINK_FLAGS += -stdlib=$(stdlib)
 endif
 
 ifeq (intel64,$(arch))
+    ITT_NOTIFY = -DDO_ITT_NOTIFY
     CPLUS_FLAGS += -m64 $(RTM_KEY)
     LINK_FLAGS += -m64
     LIB_LINK_FLAGS += -m64
 endif
 
 ifeq (ia32,$(arch))
+    ITT_NOTIFY = -DDO_ITT_NOTIFY
     CPLUS_FLAGS += -m32 $(RTM_KEY)
     LINK_FLAGS += -m32
     LIB_LINK_FLAGS += -m32
@@ -86,15 +83,26 @@ ifeq (ppc32,$(arch))
     LIB_LINK_FLAGS += -arch ppc
 endif
 
-ifeq (armv7,$(arch))
-    CPLUS_FLAGS += -arch armv7
-    LINK_FLAGS += -arch armv7
-    LIB_LINK_FLAGS += -arch armv7
+ifeq ($(arch),$(filter $(arch),armv7 armv7s arm64))
+    CPLUS_FLAGS += -arch $(arch)
+    LINK_FLAGS += -arch $(arch)
+    LIB_LINK_FLAGS += -arch $(arch)
 endif
 
 ifdef SDKROOT
     CPLUS_FLAGS += -isysroot $(SDKROOT)
+    LINK_FLAGS += -L$(SDKROOT)/usr/lib/system -L$(SDKROOT)/usr/lib/
     LIB_LINK_FLAGS += -L$(SDKROOT)/usr/lib/system -L$(SDKROOT)/usr/lib/
+endif
+
+ifeq (ios,$(target))
+    CPLUS_FLAGS += -miphoneos-version-min=$(IPHONEOS_DEPLOYMENT_TARGET)
+    LINK_FLAGS += -miphoneos-version-min=$(IPHONEOS_DEPLOYMENT_TARGET)
+    LIB_LINK_FLAGS += -miphoneos-version-min=$(IPHONEOS_DEPLOYMENT_TARGET)
+else
+    CPLUS_FLAGS += -mmacosx-version-min=$(MACOSX_DEPLOYMENT_TARGET)
+    LINK_FLAGS += -mmacosx-version-min=$(MACOSX_DEPLOYMENT_TARGET)
+    LIB_LINK_FLAGS += -mmacosx-version-min=$(MACOSX_DEPLOYMENT_TARGET)
 endif
 
 #------------------------------------------------------------------------------

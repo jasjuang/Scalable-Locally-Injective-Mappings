@@ -1,21 +1,17 @@
 /*
-    Copyright 2005-2015 Intel Corporation.  All Rights Reserved.
+    Copyright (c) 2005-2019 Intel Corporation
 
-    This file is part of Threading Building Blocks. Threading Building Blocks is free software;
-    you can redistribute it and/or modify it under the terms of the GNU General Public License
-    version 2  as  published  by  the  Free Software Foundation.  Threading Building Blocks is
-    distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
-    implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-    See  the GNU General Public License for more details.   You should have received a copy of
-    the  GNU General Public License along with Threading Building Blocks; if not, write to the
-    Free Software Foundation, Inc.,  51 Franklin St,  Fifth Floor,  Boston,  MA 02110-1301 USA
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
 
-    As a special exception,  you may use this file  as part of a free software library without
-    restriction.  Specifically,  if other files instantiate templates  or use macros or inline
-    functions from this file, or you compile this file and link it with other files to produce
-    an executable,  this file does not by itself cause the resulting executable to be covered
-    by the GNU General Public License. This exception does not however invalidate any other
-    reasons why the executable file might be covered by the GNU General Public License.
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
 */
 
 #ifndef _TBB_market_H
@@ -56,6 +52,7 @@ private:
     friend void ITT_DoUnsafeOneTimeInitialization ();
 
     typedef intrusive_list<arena> arena_list_type;
+    typedef intrusive_list<generic_scheduler> scheduler_list_type;
 
     //! Currently active global market
     static market* theMarket;
@@ -91,11 +88,16 @@ private:
     //! Number of workers that were requested by all arenas
     int my_total_demand;
 
+#if __TBB_ENQUEUE_ENFORCED_CONCURRENCY
+    //! How many times mandatory concurrency was requested from the market
+    int my_mandatory_num_requested;
+#endif
+
 #if __TBB_TASK_PRIORITY
     //! Highest priority among active arenas in the market.
     /** Arena priority level is its tasks highest priority (specified by arena's
         my_top_priority member).
-        Arena is active when it has outstanding request for workers. Note that 
+        Arena is active when it has outstanding request for workers. Note that
         inactive arena may have workers lingering there for some time. **/
     intptr_t my_global_top_priority;
 
@@ -150,8 +152,13 @@ private:
     size_t my_stack_size;
 
     //! Shutdown mode
-    bool join_workers;
+    bool my_join_workers;
 
+    //! The value indicating that the soft limit warning is unnecessary
+    static const unsigned skip_soft_limit_warning = ~0U;
+
+    //! Either workers soft limit to be reported via runtime_warning() or skip_soft_limit_warning
+    unsigned my_workers_soft_limit_to_report;
 #if __TBB_COUNT_TASK_NODES
     //! Net number of nodes that have been allocated from heap.
     /** Updated each time a scheduler or arena is destroyed. */
@@ -162,8 +169,7 @@ private:
     market ( unsigned workers_soft_limit, unsigned workers_hard_limit, size_t stack_size );
 
     //! Factory method creating new market object
-    static market& global_market ( unsigned max_num_workers = 0, size_t stack_size = 0,
-                                   bool default_concurrency_requested = false, bool is_public = false );
+    static market& global_market ( bool is_public, unsigned max_num_workers = 0, size_t stack_size = 0 );
 
     //! Destroys and deallocates market object created by market::create()
     void destroy ();
@@ -172,8 +178,11 @@ private:
     //! Returns next arena that needs more workers, or NULL.
     arena* arena_in_need ( arena* prev_arena );
 
+    //! Recalculates the number of workers requested from RML and updates the allotment.
+    int update_workers_request();
+
     //! Recalculates the number of workers assigned to each arena at and below the specified priority.
-    /** The actual number of workers servicing a particular arena may temporarily 
+    /** The actual number of workers servicing a particular arena may temporarily
         deviate from the calculated value. **/
     void update_allotment ( intptr_t highest_affected_priority );
 
@@ -200,13 +209,14 @@ private:
 #else /* !__TBB_TASK_PRIORITY */
 
     //! Recalculates the number of workers assigned to each arena in the list.
-    /** The actual number of workers servicing a particular arena may temporarily 
+    /** The actual number of workers servicing a particular arena may temporarily
         deviate from the calculated value. **/
     void update_allotment () {
         if ( my_total_demand )
-            update_allotment( my_arenas, my_total_demand, (int)my_max_num_workers );
+            update_allotment( my_arenas, my_total_demand, (int)my_num_workers_soft_limit );
     }
 
+    // TODO: consider to rewrite the code with is_arena_in_list function
     //! Returns next arena that needs more workers, or NULL.
     arena* arena_in_need (arena*) {
         if(__TBB_load_with_acquire(my_total_demand) <= 0)
@@ -217,9 +227,6 @@ private:
     void assert_market_valid () const {}
 #endif /* !__TBB_TASK_PRIORITY */
 
-    //! Returns number of masters doing computational (CPU-intensive) work
-    int num_active_masters () { return 1; }  // APM TODO: replace with a real mechanism
-
     ////////////////////////////////////////////////////////////////////////////////
     // Helpers to unify code branches dependent on priority feature presence
 
@@ -227,35 +234,37 @@ private:
 
     void remove_arena_from_list ( arena& a );
 
-    arena* arena_in_need ( arena_list_type &arenas, arena *&next );
+    arena* arena_in_need ( arena_list_type &arenas, arena *hint );
 
-    static void update_allotment ( arena_list_type& arenas, int total_demand, int max_workers );
+    int update_allotment ( arena_list_type& arenas, int total_demand, int max_workers );
+
+    bool is_arena_in_list( arena_list_type &arenas, arena *a );
 
 
     ////////////////////////////////////////////////////////////////////////////////
     // Implementation of rml::tbb_client interface methods
 
-    /*override*/ version_type version () const { return 0; }
+    version_type version () const __TBB_override { return 0; }
 
-    /*override*/ unsigned max_job_count () const { return my_num_workers_hard_limit; }
+    unsigned max_job_count () const __TBB_override { return my_num_workers_hard_limit; }
 
-    /*override*/ size_t min_stack_size () const { return worker_stack_size(); }
+    size_t min_stack_size () const __TBB_override { return worker_stack_size(); }
 
-    /*override*/ policy_type policy () const { return throughput; }
+    policy_type policy () const __TBB_override { return throughput; }
 
-    /*override*/ job* create_one_job ();
+    job* create_one_job () __TBB_override;
 
-    /*override*/ void cleanup( job& j );
+    void cleanup( job& j ) __TBB_override;
 
-    /*override*/ void acknowledge_close_connection ();
+    void acknowledge_close_connection () __TBB_override;
 
-    /*override*/ void process( job& j );
+    void process( job& j ) __TBB_override;
 
 public:
     //! Creates an arena object
     /** If necessary, also creates global market instance, and boosts its ref count.
         Each call to create_arena() must be matched by the call to arena::free_arena(). **/
-    static arena& create_arena ( int num_slots, size_t stack_size, bool default_concurrency_requested );
+    static arena* create_arena ( int num_slots, int num_reserved_slots, size_t stack_size );
 
     //! Removes the arena from the market's list
     void try_destroy_arena ( arena*, uintptr_t aba_epoch );
@@ -264,16 +273,28 @@ public:
     void detach_arena ( arena& );
 
     //! Decrements market's refcount and destroys it in the end
-    void release ( bool is_public = false );
+    bool release ( bool is_public, bool blocking_terminate );
+
+#if __TBB_ENQUEUE_ENFORCED_CONCURRENCY
+    //! Imlpementation of mandatory concurrency enabling
+    void enable_mandatory_concurrency_impl ( arena *a );
+
+    //! Inform the master that there is an arena with mandatory concurrency
+    void enable_mandatory_concurrency ( arena *a );
+
+    //! Inform the master that the arena is no more interested in mandatory concurrency
+    void disable_mandatory_concurrency_impl(arena* a);
+
+    //! Inform the master that the arena is no more interested in mandatory concurrency
+    void mandatory_concurrency_disable ( arena *a );
+#endif /* __TBB_ENQUEUE_ENFORCED_CONCURRENCY */
 
     //! Request that arena's need in workers should be adjusted.
     /** Concurrent invocations are possible only on behalf of different arenas. **/
     void adjust_demand ( arena&, int delta );
 
-    //! Wait workers termination
-    void wait_workers ();
-
-    bool must_join_workers () const { return join_workers; }
+    //! Used when RML asks for join mode during workers termination.
+    bool must_join_workers () const { return my_join_workers; }
 
     //! Returns the requested stack size of worker threads.
     size_t worker_stack_size () const { return my_stack_size; }
@@ -300,16 +321,20 @@ public:
 
 #if __TBB_TASK_GROUP_CONTEXT
     //! Finds all contexts affected by the state change and propagates the new state to them.
+    /** The propagation is relayed to the market because tasks created by one
+        master thread can be passed to and executed by other masters. This means
+        that context trees can span several arenas at once and thus state change
+        propagation cannot be generally localized to one arena only. **/
     template <typename T>
     bool propagate_task_group_state ( T task_group_context::*mptr_state, task_group_context& src, T new_state );
 #endif /* __TBB_TASK_GROUP_CONTEXT */
 
 #if __TBB_TASK_PRIORITY
-    //! Lowers arena's priority is not higher than newPriority 
-    /** Returns true if arena priority was actually elevated. **/ 
+    //! Lowers arena's priority is not higher than newPriority
+    /** Returns true if arena priority was actually elevated. **/
     bool lower_arena_priority ( arena& a, intptr_t new_priority, uintptr_t old_reload_epoch );
 
-    //! Makes sure arena's priority is not lower than newPriority 
+    //! Makes sure arena's priority is not lower than newPriority
     /** Returns true if arena priority was elevated. Also updates arena's bottom
         priority boundary if necessary.
 
@@ -320,15 +345,15 @@ public:
 #endif /* __TBB_TASK_PRIORITY */
 
 #if __TBB_COUNT_TASK_NODES
-    //! Returns the number of task objects "living" in worker threads
-    intptr_t workers_task_node_count();
-
     //! Net number of nodes that have been allocated from heap.
     /** Updated each time a scheduler or arena is destroyed. */
     void update_task_node_count( intptr_t delta ) { my_task_node_count += delta; }
 #endif /* __TBB_COUNT_TASK_NODES */
 
 #if __TBB_TASK_GROUP_CONTEXT
+    //! List of registered master threads
+    scheduler_list_type my_masters;
+
     //! Array of pointers to the registered workers
     /** Used by cancellation propagation mechanism.
         Must be the last data member of the class market. **/
@@ -340,26 +365,6 @@ public:
         return theMarket? theMarket->my_num_workers_hard_limit : 0;
     }
 }; // class market
-
-#if __TBB_TASK_PRIORITY
-    #define BeginForEachArena(a)    \
-        arenas_list_mutex_type::scoped_lock arena_list_lock(my_arenas_list_mutex);  \
-        for ( intptr_t i = my_global_top_priority; i >= my_global_bottom_priority; --i ) {  \
-            /*arenas_list_mutex_type::scoped_lock arena_list_lock(my_priority_levels[i].my_arenas_list_mutex);*/ \
-            arena_list_type &arenas = my_priority_levels[i].arenas;
-#else /* !__TBB_TASK_PRIORITY */
-    #define BeginForEachArena(a)    \
-        arena_list_type &arenas = my_arenas; {
-#endif /* !__TBB_TASK_PRIORITY */
-
-#define ForEachArena(a)     \
-    BeginForEachArena(a)    \
-        arena_list_type::iterator it = arenas.begin();  \
-        for ( ; it != arenas.end(); ++it ) {            \
-            arena &a = *it;
-
-#define EndForEach() }}
-
 
 } // namespace internal
 } // namespace tbb
