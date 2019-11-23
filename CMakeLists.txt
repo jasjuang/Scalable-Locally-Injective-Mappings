@@ -4,6 +4,8 @@ project(ReweightedARAP)
 set(CMAKE_COLOR_MAKEFILE ON)
 include(CheckCXXCompilerFlag)
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
 if(NOT TARGET uninstall)
   configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake_uninstall.cmake.in
@@ -86,20 +88,6 @@ else()
   )
 endif()
 
-# Compile thread building blocks
-set(TBB_BUILD_STATIC ON CACHE BOOL " " FORCE)
-set(TBB_BUILD_SHARED OFF CACHE BOOL " " FORCE)
-set(TBB_BUILD_TBBMALLOC OFF CACHE BOOL " " FORCE)
-set(TBB_BUILD_TBBMALLOC_PROXY OFF CACHE BOOL " " FORCE)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ext/tbb ext_build/tbb)
-
-find_package(Eigen3 3.3 REQUIRED NO_MODULE)
-find_package(libigl REQUIRED)
-
-include_directories(
-  ${CMAKE_CURRENT_SOURCE_DIR}/ext/tbb/include
-)
-
 set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/eigen_stl_utils.cpp
@@ -130,13 +118,19 @@ set(INCLUDES
 	${ADDITIONAL_INCLUDES}
 )
 
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+find_package(libigl REQUIRED)
+find_package(TBB REQUIRED)
+
 add_library(${PROJECT_NAME} SHARED ${SOURCES} ${INCLUDES})
 
 target_include_directories(
 	${PROJECT_NAME} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
                          $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include>)
 
-target_link_libraries(${PROJECT_NAME} tbb_static Eigen3::Eigen igl::core igl::common ${ADDITIONAL_LIBRARIES})
+target_include_directories(${PROJECT_NAME} SYSTEM PUBLIC ${TBB_INCLUDE_DIRS})
+
+target_link_libraries(${PROJECT_NAME} ${TBB_LIBRARIES} Eigen3::Eigen igl::core igl::common ${ADDITIONAL_LIBRARIES})
 
 install(
   TARGETS ${PROJECT_NAME}
@@ -167,6 +161,7 @@ export(TARGETS ${PROJECT_NAME} APPEND
 file(APPEND ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}Config.cmake
      "find_package(Eigen3 3.3 REQUIRED NO_MODULE)\n"
      "find_package(libigl REQUIRED)\n"
+     "find_package(TBB REQUIRED)\n"
      )
 
 install(FILES ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}Config.cmake
