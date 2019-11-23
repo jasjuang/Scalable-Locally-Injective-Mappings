@@ -77,10 +77,13 @@ set(TBB_BUILD_TBBMALLOC OFF CACHE BOOL " " FORCE)
 set(TBB_BUILD_TBBMALLOC_PROXY OFF CACHE BOOL " " FORCE)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ext/tbb ext_build/tbb)
 
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+find_package(libigl REQUIRED)
+
 include_directories(
-  ${CMAKE_CURRENT_SOURCE_DIR}/ext/libigl/include
+  # ${CMAKE_CURRENT_SOURCE_DIR}/ext/libigl/include
   ${CMAKE_CURRENT_SOURCE_DIR}/ext/tbb/include
-  ${CMAKE_CURRENT_SOURCE_DIR}/ext/eigen
+  # ${CMAKE_CURRENT_SOURCE_DIR}/ext/eigen
 )
 
 set(SOURCES
@@ -120,3 +123,5 @@ target_include_directories(
                          $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include>)
 
 target_link_libraries(${PROJECT_NAME} tbb_static ${ADDITIONAL_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} Eigen3::Eigen)
+target_link_libraries(${PROJECT_NAME} igl::core igl::common)
