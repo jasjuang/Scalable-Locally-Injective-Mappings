@@ -4,6 +4,22 @@ project(ReweightedARAP)
 set(CMAKE_COLOR_MAKEFILE ON)
 include(CheckCXXCompilerFlag)
 
+if(NOT TARGET uninstall)
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake_uninstall.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake IMMEDIATE @ONLY)
+
+  add_custom_target(
+    uninstall COMMAND ${CMAKE_COMMAND} -P
+                      ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
+endif()
+
+export(TARGETS FILE ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}Targets.cmake)
+
+file(WRITE ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}Config.cmake
+     "include(CMakeFindDependencyMacro)\n"
+     "include(\${CMAKE_CURRENT_LIST_DIR}/${CMAKE_PROJECT_NAME}Targets.cmake)\n")
+
 # Set a default build configuration if none is specified.
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   message(STATUS "Setting build type to 'Release' as none was specified.")
@@ -21,7 +37,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU"
     message(FATAL_ERROR "Unsupported compiler -- ReweightedARAP requires C++11 support!")
   endif()
 
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-result -Wno-deprecated-declarations")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-result -Wno-deprecated-declarations -fPIC")
 endif()
 
 if (MSVC)
@@ -81,9 +97,7 @@ find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(libigl REQUIRED)
 
 include_directories(
-  # ${CMAKE_CURRENT_SOURCE_DIR}/ext/libigl/include
   ${CMAKE_CURRENT_SOURCE_DIR}/ext/tbb/include
-  # ${CMAKE_CURRENT_SOURCE_DIR}/ext/eigen
 )
 
 set(SOURCES
@@ -116,12 +130,47 @@ set(INCLUDES
 	${ADDITIONAL_INCLUDES}
 )
 
-add_executable(${PROJECT_NAME} ${SOURCES} ${INCLUDES})
+add_library(${PROJECT_NAME} SHARED ${SOURCES} ${INCLUDES})
 
 target_include_directories(
 	${PROJECT_NAME} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
                          $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include>)
 
-target_link_libraries(${PROJECT_NAME} tbb_static ${ADDITIONAL_LIBRARIES})
-target_link_libraries(${PROJECT_NAME} Eigen3::Eigen)
-target_link_libraries(${PROJECT_NAME} igl::core igl::common)
+target_link_libraries(${PROJECT_NAME} tbb_static Eigen3::Eigen igl::core igl::common ${ADDITIONAL_LIBRARIES})
+
+install(
+  TARGETS ${PROJECT_NAME}
+  EXPORT ${CMAKE_PROJECT_NAME}Targets
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin)
+
+install(FILES
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/eigen_stl_utils.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/parametrization_utils.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/Param_State.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/LocalWeightedArapParametrizer.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/GlobalLocalParametrization.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/LinesearchParametrizer.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/SymmetricDirichlet.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/FastLsBuildUtils.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/StateManager.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/Energy.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/StateManager.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/AlgorithmStage.h
+	${ADDITIONAL_INCLUDES}
+	DESTINATION include/${PROJECT_NAME})
+
+export(TARGETS ${PROJECT_NAME} APPEND
+       FILE ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}Targets.cmake)
+
+file(APPEND ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}Config.cmake
+     "find_package(Eigen3 3.3 REQUIRED NO_MODULE)\n"
+     "find_package(libigl REQUIRED)\n"
+     )
+
+install(FILES ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}Config.cmake
+        DESTINATION lib/cmake/${CMAKE_PROJECT_NAME})
+
+install(EXPORT ${CMAKE_PROJECT_NAME}Targets NAMESPACE ReweightedARAP::
+        DESTINATION lib/cmake/${CMAKE_PROJECT_NAME})
