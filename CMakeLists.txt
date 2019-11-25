@@ -161,7 +161,6 @@ export(TARGETS ${PROJECT_NAME} APPEND
 file(APPEND ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}Config.cmake
      "find_package(Eigen3 3.3 REQUIRED NO_MODULE)\n"
      "find_package(libigl REQUIRED)\n"
-     "find_package(TBB REQUIRED)\n"
      )
 
 install(FILES ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}Config.cmake
